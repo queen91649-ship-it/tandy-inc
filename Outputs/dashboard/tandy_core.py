@@ -467,7 +467,7 @@ def main():
         except Exception as ex:
             link_report += f"* {url} : 警告 - アクセス失敗 ({ex})\n"
 
-    # Compliance監査 (2026年の日付監査の厳密化)
+    # Compliance監査 (絵文字排除 ＆ 2026年日付 of 厳密化)
     print("\n--- Compliance監査中 ---")
     compliance_prompt = (
         f"編集長から朝刊ドラフトが届きました。\n【朝刊ドラフト】{draft}\n"
