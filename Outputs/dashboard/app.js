@@ -25,6 +25,7 @@ const workflowNames = {
 let selectedMode = 'auto';
 let draggedProposalName = null;
 let currentSelectedProposal = null;
+let currentSelectedPending = null;
 
 // クロック表示
 function updateClock() {
@@ -65,9 +66,15 @@ function initTabs() {
                 activeTab.classList.add('active');
             }
             
-            // 提案タブが開かれた場合は、提案データを読み込み
-            if (targetTab === 'proposals') {
+            // タブ遷移に応じた初回読み込み処理
+            if (targetTab === 'ceo-office') {
+                scanInbox();
+                scanPendingApproval();
+            } else if (targetTab === 'proposals') {
                 loadProposals();
+            } else if (targetTab === 'ops') {
+                scanInbox();
+                updateWatcherStatus();
             }
         });
     });
@@ -106,9 +113,11 @@ function initDragAndDrop() {
     });
 }
 
-// Inboxスキャン
+// Inboxスキャン (インプット監視モニター)
 async function scanInbox() {
     const listElement = document.getElementById('inbox-list');
+    if (!listElement) return;
+    
     try {
         const response = await fetch('/api/inbox');
         const files = await response.json();
@@ -149,9 +158,11 @@ async function scanInbox() {
     }
 }
 
-// Pending Approval スキャン
+// Pending Approval スキャン (承認待ちリスト)
 async function scanPendingApproval() {
     const listElement = document.getElementById('pending-list');
+    if (!listElement) return;
+    
     try {
         const response = await fetch('/api/pending-approval');
         const files = await response.json();
@@ -166,13 +177,111 @@ async function scanPendingApproval() {
             const li = document.createElement('li');
             li.className = 'file-item';
             li.style.borderLeftColor = '#f59e0b';
+            li.style.cursor = 'pointer';
             
             const icon = file.type === 'directory' ? '📁' : '📄';
             li.innerHTML = `<span>${icon} ${file.name}</span><span class="status-badge" style="background-color:rgba(245, 158, 11, 0.15);color:#f59e0b;">承認待ち</span>`;
+            
+            // クリック時に監査プレビューを開く
+            li.onclick = () => {
+                currentSelectedPending = file.name;
+                viewPendingDetail(file.name);
+            };
+            
             listElement.appendChild(li);
         });
     } catch (error) {
         listElement.innerHTML = '<li class="file-item loading">承認待ちフォルダのスキャンに失敗しました。</li>';
+    }
+}
+
+// 承認待ち成果物の監査プレビュー取得・描画
+async function viewPendingDetail(name) {
+    const titleElement = document.getElementById('pending-detail-title');
+    const contentElement = document.getElementById('pending-detail-content');
+    const actionArea = document.getElementById('pending-action-area');
+    
+    titleElement.textContent = `🔍 成果物監査: ${name}`;
+    contentElement.innerHTML = '<p class="preview-placeholder">成果物のテキストデータを読み込んでいます...</p>';
+    if (actionArea) actionArea.style.display = 'none';
+    
+    try {
+        const response = await fetch(`/api/pending/detail?name=${encodeURIComponent(name)}`);
+        if (!response.ok) throw new Error("Failed to fetch detail");
+        const text = await response.text();
+        
+        // 簡易Markdown HTMLコンバータ
+        let html = text
+            .replace(/^#\s+(.+)$/gm, '<h1 style="color:#00f0ff;font-family:\'Outfit\';font-size:22px;margin:24px 0 12px 0;">$1</h1>')
+            .replace(/^##\s+(.+)$/gm, '<h2 style="color:#9d00ff;font-family:\'Outfit\';font-size:18px;margin:20px 0 8px 0;border-bottom:1px solid rgba(255,255,255,0.06);padding-bottom:6px;">$1</h2>')
+            .replace(/^###\s+(.+)$/gm, '<h3 style="color:#f3f4f6;font-family:\'Outfit\';font-size:14px;margin:14px 0 6px 0;">$1</h3>')
+            .replace(/^\*\s+(.+)$/gm, '<li style="margin-left:18px;margin-bottom:6px;list-style-type:square;color:#f3f4f6;font-size:13px;">$1</li>')
+            .replace(/^- \s*(.+)$/gm, '<li style="margin-left:18px;margin-bottom:6px;list-style-type:square;color:#f3f4f6;font-size:13px;">$1</li>')
+            .replace(/\*\*(.*?)\*\*/g, '<strong style="color:#00f0ff;">$1</strong>')
+            .replace(/\n\n/g, '<br><br>')
+            .replace(/\n/g, '<br>');
+            
+        contentElement.innerHTML = `<div style="font-family:'Inter';font-size:14px;line-height:1.6;color:#e5e7eb;padding:10px;">${html}</div>`;
+        
+        // アクションエリアを表示し、承認・却下ボタンにハンドリングをバインド
+        if (actionArea) {
+            actionArea.style.display = 'block';
+            
+            document.getElementById('btn-approve-pending').onclick = () => executePendingAction(name, 'approve');
+            document.getElementById('btn-reject-pending').onclick = () => executePendingAction(name, 'reject');
+        }
+        
+    } catch (error) {
+        contentElement.innerHTML = '<p class="preview-placeholder" style="color:#ef4444;">詳細テキストの取得に失敗しました。バイナリまたはフォルダ構造のみの可能性があります。</p>';
+    }
+}
+
+// 成果物承認・却下アクション実行
+async function executePendingAction(name, action) {
+    const actionLabel = action === 'approve' ? '承認' : '却下';
+    const confirmMsg = action === 'approve'
+        ? `この成果物「${name}」を承認し、本番リリース（Outputs/archive/ へ移動）してよろしいですか？`
+        : `この成果物「${name}」を却下（アーカイブ退避）し、修正・再起案を要求しますか？`;
+        
+    if (!confirm(confirmMsg)) return;
+    
+    try {
+        const response = await fetch('/api/pending/action', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, action })
+        });
+        
+        const result = await response.json();
+        
+        if (result.status === 'success') {
+            // 成功メッセージモーダルの起動
+            const modal = document.getElementById('confirm-modal');
+            const msg = document.getElementById('modal-msg');
+            const modalTitle = modal.querySelector('.modal-title');
+            
+            modalTitle.textContent = "成果物監査完了";
+            if (action === 'approve') {
+                msg.innerHTML = `成果物「<strong>${name}</strong>」を承認しました！<br><br>- 移動先: <span style="color:#10b981; font-weight:600;">Outputs/archive/${name}</span><br><br>リリース処理が完了し、成果物は安全に保管されました。`;
+            } else {
+                msg.innerHTML = `成果物「<strong>${name}</strong>」を却下しました。<br><br>- 移動先: <span style="color:#ef4444; font-weight:600;">Outputs/archive/rejected_assets/${name}</span><br><br>修正が必要な場合は、新規指示として再投函を行ってください。`;
+            }
+            
+            modal.classList.add('active');
+            
+            // 画面表示のリセット
+            document.getElementById('pending-detail-title').textContent = '🔍 成果物の監査プレビュー';
+            document.getElementById('pending-detail-content').innerHTML = '<p class="preview-placeholder">左側の「承認待ちの成果物」リストから監査したいファイルを選択してください。</p>';
+            document.getElementById('pending-action-area').style.display = 'none';
+            currentSelectedPending = null;
+            
+            // リスト更新
+            scanPendingApproval();
+        } else {
+            alert(`${actionLabel}処理に失敗しました: ` + result.message);
+        }
+    } catch (err) {
+        alert("通信エラーが発生しました。");
     }
 }
 
@@ -481,6 +590,8 @@ async function updateWatcherStatus() {
     const circuitBadge = document.getElementById('watcher-circuit-status');
     const resetBtn = document.getElementById('btn-reset-watcher');
     
+    if (!lockBadge) return;
+    
     try {
         const response = await fetch('/api/watcher-status');
         const status = await response.json();
@@ -636,6 +747,7 @@ function resetProgress() {
 // エージェント進捗セット
 function setAgentStatus(elementId, percentage, label, isActive) {
     const row = document.getElementById(elementId);
+    if (!row) return;
     const bar = row.querySelector('.progress-bar');
     const labelSpan = row.querySelector('.agent-label');
     
@@ -651,6 +763,8 @@ function setAgentStatus(elementId, percentage, label, isActive) {
 // ワークフローのシミュレーション表示 (デモ用)
 function simulateWorkflowRun(mode) {
     const previewArea = document.getElementById('preview-content');
+    if (!previewArea) return;
+    
     previewArea.innerHTML = '<p class="preview-placeholder">AIエージェントが連携して処理を実行中...</p>';
     
     let resolvedMode = mode;
@@ -723,14 +837,12 @@ function simulateWorkflowRun(mode) {
         // リストの即時更新
         scanInbox();
         scanPendingApproval();
-        updateWatcherStatus();
     }, 10000);
 }
 
 // 完了モーダル表示
 function showConfirmModal(modeName) {
     const modal = document.getElementById('confirm-modal');
-    const msg = document.getElementById('modal-msg');
     modal.classList.remove('active');
 }
 
@@ -746,18 +858,25 @@ window.onload = () => {
     initTabs(); // タブ初期化
     initDragAndDrop(); // Drag & Drop 初期化
     
-    // 初回読み込み
+    // 初回読み込み (CEO室がデフォルトアクティブなのでCEO室用データ取得)
     scanInbox();
     scanPendingApproval();
-    updateWatcherStatus();
     
     // 定期フェッチの開始 (5秒ごと)
     setInterval(() => {
-        scanInbox();
-        scanPendingApproval();
-        updateWatcherStatus();
+        const activeTab = document.querySelector('.nav-item.active');
+        if (activeTab) {
+            const tabName = activeTab.getAttribute('data-tab');
+            if (tabName === 'ceo-office') {
+                scanInbox();
+                scanPendingApproval();
+            } else if (tabName === 'ops') {
+                scanInbox();
+                updateWatcherStatus();
+            }
+        }
     }, 5000);
     
-    // デフォルトで「自動判定モード」を選択状態にし、ハイライトする
+    // デフォルト選択状態の設定 (自動ワークフロー実行用)
     selectWorkflowMode('auto');
 };
