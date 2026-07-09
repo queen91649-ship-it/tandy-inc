@@ -5,7 +5,7 @@ const workflowDescriptions = {
     dev: "【開発コード生成モード】<br>設計要件から、必要な仕様調査 → 例外処理を徹底したソースコード自動生成 → UIUX_Designによる美観・レスポンシブ監査 → QA_Engineeringによるテストコード実行確認を行い、完成版を出力します。",
     bugfix: "【バグ修正モード】<br>Inboxに投入されたコードとエラーログを元に、原因調査 → 修正コード＆根本原因と対策の解説生成 → UIUXデザイン監査 → QAによる回帰テストを通過させて出力します。",
     research: "【市場調査モード】<br>調べたいテーマについてWebや事例を検索し、競合比較テーブルや導入ROI・コスト試算、リンク生存確認をすべてクリアした一次ソース付きの調査報告書を作成します。",
-    ui_update: "【UIデザイン更新モード】<br>既存 of ダッシュボードやWebUIの改善指示から、画面レイアウト・CSS・JSの更新箇所を分析 → 制作・自動バックアップ作成 → UIUX_Design監査 → QA動作検証を行い、直接上書き更新します。",
+    ui_update: "【UIデザイン更新モード】<br>既存のダッシュボードやWebUIの改善指示から、画面レイアウト・CSS・JSの更新箇所を分析 → 制作・自動バックアップ作成 → UIUX_Design監査 → QA動作検証を行い、直接上書き更新します。",
     newsletter: "【朝のニュースレターモード】<br>毎日朝6:00に自動実行されるモードです。監視リスト（watchlist.txt）の情報源から最新情報を収集し、全トピックに個別ビジネス影響（Tandy's Insight）を付加して出力します。",
     design_audit: "【UIデザイン定期監査 (アイデアD)】<br>現在の自社UIダッシュボード（Outputs/dashboard/）のソースコードや美観を、最新のUIUXトレンドや事例と比較分析。フォント・色彩・レスポンシブ性・アクセシビリティの観点から改善点をまとめた「デザイン改善ロードマップ」を自動生成します。"
 };
@@ -21,8 +21,10 @@ const workflowNames = {
     design_audit: "UIデザイン定期監査 (アイデアD)"
 };
 
-// 現在選択されているワークフローモード (初期状態は自動判定推奨)
+// 状態管理
 let selectedMode = 'auto';
+let draggedProposalName = null;
+let currentSelectedProposal = null;
 
 // クロック表示
 function updateClock() {
@@ -71,6 +73,39 @@ function initTabs() {
     });
 }
 
+// Drag & Drop API 初期化
+function initDragAndDrop() {
+    const dropzone = document.getElementById('proposal-dropzone');
+    if (!dropzone) return;
+    
+    dropzone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        dropzone.classList.add('dragover');
+    });
+    
+    dropzone.addEventListener('dragleave', () => {
+        dropzone.classList.remove('dragover');
+    });
+    
+    dropzone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropzone.classList.remove('dragover');
+        
+        if (draggedProposalName) {
+            openApproveModal(draggedProposalName);
+        }
+    });
+    
+    // ドロップゾーンをクリックしても採用フローに入れるようにする
+    dropzone.addEventListener('click', () => {
+        if (currentSelectedProposal) {
+            openApproveModal(currentSelectedProposal);
+        } else {
+            alert("まず、左側のリストから採用したい提案を選択するか、直接ドラッグ＆ドロップしてください。");
+        }
+    });
+}
+
 // Inboxスキャン
 async function scanInbox() {
     const listElement = document.getElementById('inbox-list');
@@ -87,7 +122,18 @@ async function scanInbox() {
         files.forEach(file => {
             const li = document.createElement('li');
             li.className = 'file-item';
-            li.innerHTML = `<span>📄 ${file.name}</span><span class="status-badge" style="background-color:rgba(0, 240, 255, 0.15);color:#00f0ff;">新規検知</span>`;
+            
+            let badgeBg = 'rgba(0, 240, 255, 0.15)';
+            let badgeColor = '#00f0ff';
+            let label = '新規検知';
+            
+            if (file.name.startsWith('【実行要求】')) {
+                badgeBg = 'rgba(157, 0, 255, 0.15)';
+                badgeColor = '#9d00ff';
+                label = '実行要求';
+            }
+            
+            li.innerHTML = `<span>📄 ${file.name}</span><span class="status-badge" style="background-color:${badgeBg};color:${badgeColor};">${label}</span>`;
             listElement.appendChild(li);
         });
     } catch (error) {
@@ -138,8 +184,20 @@ async function loadProposals() {
         proposals.forEach(p => {
             const li = document.createElement('li');
             li.className = 'file-item';
-            li.style.cursor = 'pointer';
             li.style.borderLeftColor = '#9d00ff'; // パープル
+            
+            // ドラッグ可能属性とイベントの設定
+            li.setAttribute('draggable', 'true');
+            
+            li.addEventListener('dragstart', () => {
+                draggedProposalName = p.name;
+                li.classList.add('dragging');
+            });
+            
+            li.addEventListener('dragend', () => {
+                draggedProposalName = null;
+                li.classList.remove('dragging');
+            });
             
             const date = new Date(p.created);
             const dateStr = `${date.getMonth()+1}/${date.getDate()} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
@@ -147,6 +205,7 @@ async function loadProposals() {
             li.innerHTML = `<span>💡 ${p.name}</span><span class="status-badge" style="background-color:rgba(157, 0, 255, 0.15);color:#9d00ff;">${dateStr}</span>`;
             
             li.onclick = () => {
+                currentSelectedProposal = p.name;
                 viewProposalDetail(p.name);
             };
             
@@ -161,9 +220,11 @@ async function loadProposals() {
 async function viewProposalDetail(name) {
     const titleElement = document.getElementById('proposal-detail-title');
     const contentElement = document.getElementById('proposal-detail-content');
+    const actionArea = document.getElementById('proposal-action-area');
     
     titleElement.textContent = name;
     contentElement.innerHTML = '<p class="preview-placeholder">提案書を読み込んでいます...</p>';
+    if (actionArea) actionArea.style.display = 'none';
     
     try {
         const response = await fetch(`/api/proposals/detail?name=${encodeURIComponent(name)}`);
@@ -183,9 +244,94 @@ async function viewProposalDetail(name) {
             
         contentElement.innerHTML = `<div style="font-family:'Inter';font-size:14px;line-height:1.6;color:#e5e7eb;padding:10px;">${html}</div>`;
         
+        // 詳細ロードに成功したら、採用アクションエリアを表示する
+        if (actionArea) {
+            actionArea.style.display = 'block';
+            const btn = document.getElementById('btn-adopt-proposal');
+            if (btn) {
+                btn.onclick = () => openApproveModal(name);
+            }
+        }
+        
     } catch (error) {
         contentElement.innerHTML = '<p class="preview-placeholder" style="color:#ef4444;">詳細の取得に失敗しました。</p>';
     }
+}
+
+// 採用ボタン（詳細プレビュー上のボタン）のクリックハンドラ
+function adoptSelectedProposal() {
+    if (currentSelectedProposal) {
+        openApproveModal(currentSelectedProposal);
+    }
+}
+
+// 採用・承認モーダルを開く
+function openApproveModal(name) {
+    const modal = document.getElementById('approve-modal');
+    const title = document.getElementById('approve-modal-title');
+    const msg = document.getElementById('approve-modal-msg');
+    const submitBtn = document.getElementById('approve-modal-submit-btn');
+    const commentField = document.getElementById('approve-comment');
+    
+    if (!modal) return;
+    
+    // 初期化
+    title.textContent = "提案を採用しますか？";
+    msg.innerHTML = `選択された <strong>${name}</strong> を採用し、コメントを添えて Inbox フォルダ（採用棚）へ投入します。`;
+    commentField.value = '';
+    
+    // 送信処理のバインド
+    submitBtn.onclick = async () => {
+        const comment = commentField.value;
+        submitBtn.disabled = true;
+        submitBtn.textContent = '送信中...';
+        
+        try {
+            const response = await fetch('/api/proposals/approve', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ name, comment })
+            });
+            
+            const result = await response.json();
+            closeApproveModal();
+            
+            if (result.status === 'success') {
+                // 成功アラートを表示
+                showAdoptSuccessModal(result.targetFile);
+            } else {
+                alert("採用処理に失敗しました: " + result.message);
+            }
+        } catch (err) {
+            alert("エラーが発生しました。");
+        } finally {
+            submitBtn.disabled = false;
+            submitBtn.textContent = '採用してInboxへ投入';
+        }
+    };
+    
+    modal.classList.add('active');
+}
+
+// 採用モーダルを閉じる
+function closeApproveModal() {
+    const modal = document.getElementById('approve-modal');
+    if (modal) modal.classList.remove('active');
+}
+
+// 採用成功モーダルの表示（既存のconfirm-modalを再利用）
+function showAdoptSuccessModal(targetFile) {
+    const modal = document.getElementById('confirm-modal');
+    const msg = document.getElementById('modal-msg');
+    
+    msg.innerHTML = `提案が正常に承認され、Inbox へ投入されました！<br><br>- 作成された指示書: <span style="color:#00f0ff; font-weight:600;">${targetFile}</span><br><br>毎日9:00および17:00の自動スキャン監視、または手動操作によって、AIエージェント達が自動で実行（開発・執筆）を開始します。`;
+    
+    modal.classList.add('active');
+    
+    // リストの更新
+    scanInbox();
 }
 
 // クラウド定期監視ステータスの取得
@@ -459,6 +605,7 @@ function closeModal() {
 window.onload = () => {
     updateClock();
     initTabs(); // タブ初期化
+    initDragAndDrop(); // Drag & Drop 初期化
     
     // 初回読み込み
     scanInbox();

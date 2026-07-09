@@ -124,6 +124,71 @@ const server = http.createServer((req, res) => {
         return;
     }
 
+    // API 2.7: 提案の承認 (Inboxへのコメント付きコピー投函)
+    if (req.url === '/api/proposals/approve' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => {
+            body += chunk.toString();
+        });
+        
+        req.on('end', () => {
+            try {
+                const data = JSON.parse(body);
+                const fileName = data.name;
+                const comment = data.comment || '';
+                
+                if (!fileName || fileName.includes('..') || path.isAbsolute(fileName)) {
+                    res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
+                    res.end(JSON.stringify({ status: 'error', message: 'Bad Request' }));
+                    return;
+                }
+                
+                const sourcePath = path.join(WORKSPACE_ROOT, 'Outputs', 'proposals', fileName);
+                const inboxPath = path.join(WORKSPACE_ROOT, 'Inbox');
+                
+                if (!fs.existsSync(sourcePath)) {
+                    res.writeHead(404, { 'Content-Type': 'application/json; charset=utf-8' });
+                    res.end(JSON.stringify({ status: 'error', message: 'Proposal not found' }));
+                    return;
+                }
+                
+                let fileContent = fs.readFileSync(sourcePath, 'utf8');
+                
+                // コメントが入力されている場合はファイルの末尾に追記
+                if (comment.trim() !== '') {
+                    const todayStr = new Date().toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' });
+                    fileContent += `\n\n## CEOからの追加指示 / コメント\n- 承認日時: ${todayStr} (日本時間)\n- 指示内容:\n  ${comment.replace(/\n/g, '\n  ')}\n`;
+                }
+                
+                // ファイル名から「【AI提案】」を「【実行要求】」に変更
+                let targetName = fileName.replace('【AI提案】', '【実行要求】');
+                if (!targetName.startsWith('【実行要求】')) {
+                    targetName = '【実行要求】' + targetName;
+                }
+                
+                // Inboxフォルダが存在することを確認
+                if (!fs.existsSync(inboxPath)) {
+                    fs.mkdirSync(inboxPath, { recursive: true });
+                }
+                
+                const destinationPath = path.join(inboxPath, targetName);
+                fs.writeFileSync(destinationPath, fileContent, 'utf8');
+                
+                res.writeHead(200, {
+                    'Content-Type': 'application/json; charset=utf-8',
+                    'Access-Control-Allow-Origin': '*'
+                });
+                res.end(JSON.stringify({ status: 'success', message: 'Proposal approved and copied to Inbox.', targetFile: targetName }));
+                
+            } catch (error) {
+                console.error("Error approving proposal: ", error);
+                res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+                res.end(JSON.stringify({ status: 'error', message: 'Internal Server Error' }));
+            }
+        });
+        return;
+    }
+
     // API 3: クラウド監視ステータス (ロック、エラーカウンター、サーキットブレーカー)
     if (req.url === '/api/watcher-status' && req.method === 'GET') {
         const lockPath = path.join(WORKSPACE_ROOT, '.workflow_lock');

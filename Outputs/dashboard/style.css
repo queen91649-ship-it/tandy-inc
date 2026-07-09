@@ -512,3 +512,41 @@ body {
     box-shadow: 0 0 15px rgba(239, 68, 68, 0.2);
 }
 
+/* --- ドラッグ＆ドロップゾーンの演出 --- */
+.dropzone {
+    border: 2px dashed rgba(157, 0, 255, 0.3) !important;
+    background-color: rgba(157, 0, 255, 0.02) !important;
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+.dropzone.dragover {
+    border-color: var(--primary) !important;
+    background-color: rgba(0, 240, 255, 0.08) !important;
+    box-shadow: 0 0 25px rgba(0, 240, 255, 0.3) !important;
+    transform: scale(1.02);
+}
+
+/* ドラッグ可能なアイテムのカーソル */
+#proposal-list-items .file-item {
+    cursor: grab !important;
+    user-select: none;
+}
+
+#proposal-list-items .file-item:active {
+    cursor: grabbing !important;
+}
+
+/* ドラッグ中の要素の半透明エフェクト */
+.file-item.dragging {
+    opacity: 0.4;
+    border-color: var(--primary) !important;
+}
+
+/* テキストエリアの装飾 */
+#approve-comment:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 10px rgba(0, 240, 255, 0.15);
+}
+
+
