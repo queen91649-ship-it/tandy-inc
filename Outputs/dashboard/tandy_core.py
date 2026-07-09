@@ -84,9 +84,8 @@ class TandyDriveClient:
 
     def archive_and_update_newsletter(self, folder_id, content):
         """
-        前回の 'latest_newsletter' の複製コピーはサービスアカウントの容量制限（上限0バイト）を回避するため行わず、
-        代わりにローカルの Outputs/newsletters/ 内にMarkdownとしてアーカイブを出力し、
-        Google Docs（latest_newsletter）はDocs APIで上書き更新する。
+        前回の 'latest_newsletter' を日付付きで複製コピーしてアーカイブ保存し、
+        元の 'latest_newsletter' の内容を Google Docs API で上書き更新＆フォーマット整形する。
         """
         # 1. 既存の latest_newsletter を検索
         query = f"'{folder_id}' in parents and name contains 'latest_newsletter' and trashed = false"
@@ -98,14 +97,14 @@ class TandyDriveClient:
 
         latest_id = files[0]['id']
         
-        # 2. ローカルに日付付きMarkdownでアーカイブを保存（GitHub Actionsがこれをコミットして履歴保存する）
-        archive_name = f"{datetime.date.today().strftime('%Y%m%d')}_newsletter.md"
-        local_dir = "Outputs/newsletters"
-        os.makedirs(local_dir, exist_ok=True)
-        local_path = os.path.join(local_dir, archive_name)
-        with open(local_path, "w", encoding="utf-8") as f:
-            f.write(content)
-        print(f"ローカルアーカイブにニュースレターを保存しました: {local_path}")
+        # 2. 前日の内容を日付付きファイル名でコピー（アーカイブ - 日本時間基準）
+        jst = datetime.timezone(datetime.timedelta(hours=9))
+        archive_name = f"{datetime.datetime.now(jst).strftime('%Y%m%d')}_newsletter"
+        print(f"前日のニュースレターをコピーアーカイブ中: {archive_name}")
+        self.service.files().copy(
+            fileId=latest_id,
+            body={'name': archive_name}
+        ).execute()
 
         # 3. Google Docs API を用いた本番上書き ＆ 自己肯定感が上がる美麗フォーマットの適用
         print("最新ニュースレターを上書き更新 ＆ 知的フォーマット整形中...")
@@ -141,7 +140,6 @@ class TandyDriveClient:
         formatting_actions = []
 
         for line in lines:
-            # 見出し・区切り・箇条書きなどの解析
             if line.startswith('# '):
                 clean_text = line[2:].strip() + '\n'
                 requests.append({'insertText': {'location': {'index': current_index}, 'text': clean_text}})
@@ -158,7 +156,6 @@ class TandyDriveClient:
                 formatting_actions.append(('HEADING_3', current_index, current_index + len(clean_text)))
                 current_index += len(clean_text)
             elif line.strip() == '---':
-                # 美麗な水平線の代替
                 divider = "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                 requests.append({'insertText': {'location': {'index': current_index}, 'text': divider}})
                 formatting_actions.append(('DIVIDER', current_index, current_index + len(divider)))
@@ -167,13 +164,10 @@ class TandyDriveClient:
                 clean_text = line + '\n'
                 requests.append({'insertText': {'location': {'index': current_index}, 'text': clean_text}})
                 
-                # 特定のキーワード（Tandy's Insight など）に太字や色付けを適用
                 if "Tandy's Insight" in clean_text:
                     start_offset = clean_text.find("Tandy's Insight")
                     formatting_actions.append(('INSIGHT_HIGHLIGHT', current_index + start_offset, current_index + start_offset + len("Tandy's Insight")))
                 
-                # ボールド表記 ( **text** ) をDocsのボールド書式にパース
-                # 簡易正規表現パース
                 bold_matches = list(re.finditer(r'\*\*(.*?)\*\*', clean_text))
                 for match in bold_matches:
                     b_start = current_index + match.start()
@@ -186,10 +180,9 @@ class TandyDriveClient:
         if requests:
             self.docs_service.documents().batchUpdate(documentId=document_id, body={'requests': requests}).execute()
 
-        # 挿入後の最新ドキュメントのインデックスで書式適用リクエストを再ビルド
+        # 3-D. 書式適用リクエストを作成
         style_requests = []
         for action, start, end in formatting_actions:
-            # インデックス超過を防ぐためのセーフチェック
             if start < 1:
                 continue
             
@@ -201,7 +194,6 @@ class TandyDriveClient:
                         'fields': 'namedStyleType'
                     }
                 })
-                # タイトルの文字色（ダークネイビー）とサイズ
                 style_requests.append({
                     'updateTextStyle': {
                         'range': {'startIndex': start, 'endIndex': end - 1},
@@ -221,7 +213,6 @@ class TandyDriveClient:
                         'fields': 'namedStyleType'
                     }
                 })
-                # 大見出しの文字色（スチールブルー）とサイズ
                 style_requests.append({
                     'updateTextStyle': {
                         'range': {'startIndex': start, 'endIndex': end - 1},
@@ -253,7 +244,6 @@ class TandyDriveClient:
                     }
                 })
             elif action == 'INSIGHT_HIGHLIGHT':
-                # Tandy's Insightをネイビー太字に強調
                 style_requests.append({
                     'updateTextStyle': {
                         'range': {'startIndex': start, 'endIndex': end},
@@ -273,7 +263,6 @@ class TandyDriveClient:
                     }
                 })
             elif action == 'DIVIDER':
-                # 区切り線の色
                 style_requests.append({
                     'updateTextStyle': {
                         'range': {'startIndex': start, 'endIndex': end},
@@ -284,15 +273,14 @@ class TandyDriveClient:
                     }
                 })
 
-        # 3-D. 書式の適用を実行（一括）
+        # 3-E. 書式の適用を実行
         if style_requests:
             try:
                 self.docs_service.documents().batchUpdate(documentId=document_id, body={'requests': style_requests}).execute()
             except Exception as ex:
-                # マークダウンパース箇所のインデックス微調整の例外逃げ
                 print(f"書式適用で一部スキップが発生しました: {ex}")
 
-        # 3-E. マークダウンの不要な「**」記号を消去するバッチ置換
+        # 3-F. マークダウンの不要な「**」記号を消去
         replace_requests = [
             {
                 'replaceAllText': {
@@ -303,77 +291,16 @@ class TandyDriveClient:
         ]
         self.docs_service.documents().batchUpdate(documentId=document_id, body={'requests': replace_requests}).execute()
 
-    def empty_trash_and_show_quota(self):
-        """
-        サービスアカウントのストレージ容量（クォータ）を表示し、
-        ゴミ箱（Trash）を空にして容量を解放する。
-        """
-        print("\n--- サービスアカウント ストレージ確認 ＆ ゴミ箱クリア ---")
-        try:
-            about = self.service.about().get(fields="storageQuota").execute()
-            quota = about.get('storageQuota', {})
-            limit = int(quota.get('limit', 0)) / (1024**3) if 'limit' in quota else 0
-            usage = int(quota.get('usage', 0)) / (1024**3) if 'usage' in quota else 0
-            print(f"ストレージ使用状況: {usage:.4f} GB / 上限: {limit:.4f} GB")
-        except Exception as e:
-            print(f"ストレージ情報の取得に失敗しました: {e}")
-
-        try:
-            print("ゴミ箱を空にしています...")
-            self.service.files().emptyTrash().execute()
-            print("ゴミ箱のクリアが完了しました。")
-            
-            # クリア後の再確認
-            about = self.service.about().get(fields="storageQuota").execute()
-            quota = about.get('storageQuota', {})
-            usage = int(quota.get('usage', 0)) / (1024**3) if 'usage' in quota else 0
-            print(f"クリア後のストレージ使用状況: {usage:.4f} GB")
-        except Exception as e:
-            print(f"ゴミ箱のクリアに失敗しました: {e}")
-
-    def cleanup_old_archives(self, folder_id, keep_days=30):
-        """
-        アーカイブフォルダ内の古いファイルを削除する（デフォルト30日間保持）
-        """
-        print(f"\n--- 古いアーカイブのクリーンアップ (過去 {keep_days} 日分を保持) ---")
-        try:
-            query = f"'{folder_id}' in parents and name contains '_newsletter' and trashed = false"
-            results = self.service.files().list(
-                q=query, 
-                orderBy="name desc", 
-                fields='files(id, name, createdTime)'
-            ).execute()
-            files = results.get('files', [])
-            
-            archive_files = []
-            for f in files:
-                if re.match(r'^\d{8}_newsletter', f['name']):
-                    archive_files.append(f)
-            
-            print(f"見つかったアーカイブ数: {len(archive_files)} 件")
-            if len(archive_files) > keep_days:
-                to_delete = archive_files[keep_days:]
-                print(f"保持上限 ({keep_days} 件) を超えたため、{len(to_delete)} 件の古いファイルを削除します。")
-                for f in to_delete:
-                    print(f"削除中: {f['name']} (ID: {f['id']})")
-                    self.service.files().delete(fileId=f['id']).execute()
-                print("古いアーカイブの削除が完了しました。")
-            else:
-                print("削除対象の古いアーカイブはありません。")
-        except Exception as e:
-            print(f"古いアーカイブのクリーンアップに失敗しました: {e}")
-
 
 def clean_emoji_and_symbols(text):
     """テキストから絵文字および装飾絵文字記号を完全に排除する"""
-    # Unicodeの絵文字ブロック、および各種記号ブロックの除去
     emoji_pattern = re.compile(
-        r'[\u2600-\u27BF]|'  # 記号・装飾
-        r'[\uE000-\uF8FF]|'  # 外字
-        r'\uD83C[\uDF00-\uDFFF]|'  # カラー絵文字
-        r'\uD83D[\uDC00-\uDFFF]|'  # カラー絵文字
-        r'[\u2011-\u26FF]|'  # その他の記号
-        r'\uD83E[\uDD10-\uDDFF]',  # 追加の絵文字
+        r'[\u2600-\u27BF]|'  
+        r'[\uE000-\uF8FF]|'  
+        r'\uD83C[\uDF00-\uDFFF]|'  
+        r'\uD83D[\uDC00-\uDFFF]|'  
+        r'[\u2011-\u26FF]|'  
+        r'\uD83E[\uDD10-\uDDFF]',  
         flags=re.UNICODE
     )
     return emoji_pattern.sub('', text)
@@ -389,9 +316,12 @@ def main():
     drive.empty_trash_and_show_quota()
     
     gemini_client = genai.Client(api_key=GEMINI_API_KEY)
-    today_str = datetime.date.today().strftime("%Y年%m月%d日")
+    
+    # 日本時間 (UTC+9) の日付を明示的に取得して使用
+    jst = datetime.timezone(datetime.timedelta(hours=9))
+    today_str = datetime.datetime.now(jst).strftime("%Y年%m月%d日")
 
-    # watchlist.txt 読み込み (日本語フォルダ名対応)
+    # watchlist.txt 読み込み
     print("watchlist.txt を読み込み中...")
     watchlist_id = drive.find_file_id_by_path("02_情報リサーチ/watchlist.txt")
     if not watchlist_id:
@@ -399,7 +329,7 @@ def main():
     watchlist_content = drive.read_file_content(watchlist_id)
     print("watchlist.txt 読み込み完了。")
 
-    # 記者・編集長・監査役の定義ファイル読み込み (日本語フォルダ名・専属記者フォルダ対応)
+    # 記者・編集長・監査役の定義ファイル読み込み
     reporters = {
         "japan":       "08_出版事業部/専属記者/reporter_japan.md",
         "global":      "08_出版事業部/専属記者/reporter_global.md",
@@ -422,7 +352,7 @@ def main():
     auditor_id = drive.find_file_id_by_path("05_法務監査/auditor_agent.md")
     auditor_instruction = drive.read_file_content(auditor_id) if auditor_id else "あなたはコンプライアンス監査役です。"
 
-    # 8名の記者による執筆 (絵文字排除指示 ＆ 自己肯定感を高める知的なライティング)
+    # 8名の記者による執筆
     articles = {}
     print("\n--- 8名の記者が執筆を開始します ---")
     for name, instruction in reporter_instructions.items():
@@ -446,14 +376,13 @@ def main():
                     tools=[{"google_search": {}}]
                 ),
             )
-            # 強制的な絵文字フィルタリング
             articles[name] = clean_emoji_and_symbols(response.text)
             print(f"{name} 記者 執筆完了。")
         except Exception as ex:
             articles[name] = f"【エラー】{name}記者の執筆中にエラーが発生しました: {ex}"
             print(f"{name} 記者 エラー: {ex}")
 
-    # 編集長によるパッケージング (絵文字禁止 ＆ モチベーション重視)
+    # 編集長によるパッケージング
     print("\n--- 編集長がパッケージング中 ---")
     editor_prompt = (
         f"本日の日付は {today_str} です。8名の記者から以下の原稿が届きました。\n"
@@ -487,13 +416,14 @@ def main():
         except Exception as ex:
             link_report += f"* {url} : 警告 - アクセス失敗 ({ex})\n"
 
-    # Compliance監査 (絵文字排除)
+    # Compliance監査 (2026年の日付監査の厳密化)
     print("\n--- Compliance監査中 ---")
     compliance_prompt = (
         f"編集長から朝刊ドラフトが届きました。\n【朝刊ドラフト】{draft}\n"
-        f"ハルシネーションがないかを検証し、以下のURL検証ログと合わせて監査レポートを作成してください。\n"
+        f"本日の正確な日付は {today_str}（2026年）です。この日付を絶対的な基準として、記述されている各ニュースのファクトや年（2024年などの過去ニュースの混入）にハルシネーションがないかを検証してください。\n"
+        f"また、以下のURL検証ログと合わせて監査レポートを作成してください。\n"
         f"【URLログ】{link_report}\n"
-        "最後に朝刊ドラフトの末尾に監査レポートをドッキングした最終版を書き出してください。"
+        "最後に朝刊ドラフトの末尾に監査レポートをドッキングした最終版を書き出してください。\n"
         "【重要規約】: 絵文字は一切使用しないでください。"
     )
     final = gemini_client.models.generate_content(
