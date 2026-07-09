@@ -1,0 +1,373 @@
+// 各モードの日本語説明定義
+const workflowDescriptions = {
+    auto: "【自動判定モード (推奨)】<br>Inboxに置かれている新規ファイルをAIが自動で検知し、内容や拡張子から最も適切なモード（ブログ/開発/バグ修正/UI更新/市場調査）を自動で判断して実行します。ファイルを置いて実行するだけの簡単モードです。",
+    blog: "【ブログ記事モード】<br>指定されたトピックから、リサーチ → 記事＆SNSドラフト生成 → Complianceによるハルシネーション（事実誤認）およびリンク生存監査を行い、完成版パッケージを出力します。",
+    dev: "【開発コード生成モード】<br>設計要件から、必要な仕様調査 → 例外処理を徹底したソースコード自動生成 → UIUX_Designによる美観・レスポンシブ監査 → QA_Engineeringによるテストコード実行確認を行い、完成版を出力します。",
+    bugfix: "【バグ修正モード】<br>Inboxに投入されたコードとエラーログを元に、原因調査 → 修正コード＆根本原因と対策の解説生成 → UIUXデザイン監査 → QAによる回帰テストを通過させて出力します。",
+    research: "【市場調査モード】<br>調べたいテーマについてWebや事例を検索し、競合比較テーブルや導入ROI・コスト試算、リンク生存確認をすべてクリアした一次ソース付きの調査報告書を作成します。",
+    ui_update: "【UIデザイン更新モード】<br>既存のダッシュボードやWebUIの改善指示から、画面レイアウト・CSS・JSの更新箇所を分析 → 制作・自動バックアップ作成 → UIUX_Design監査 → QA動作検証を行い、直接上書き更新します。",
+    newsletter: "【朝のニュースレターモード】<br>毎日朝6:00に自動実行されるモードです。監視リスト（watchlist.txt）の情報源から最新情報を収集し、全トピックに個別ビジネス影響（Tandy's Insight）を付加して出力します。",
+    design_audit: "【UIデザイン定期監査 (アイデアD)】<br>現在の自社UIダッシュボード（Outputs/dashboard/）のソースコードや美観を、最新のUIUXトレンドや事例と比較分析。フォント・色彩・レスポンシブ性・アクセシビリティの観点から改善点をまとめた「デザイン改善ロードマップ」を自動生成します。"
+};
+
+const workflowNames = {
+    auto: "自動判定ワークフロー",
+    blog: "ブログ記事モード",
+    dev: "開発コード生成",
+    bugfix: "バグ修正モード",
+    research: "市場調査モード",
+    ui_update: "UIデザイン更新",
+    newsletter: "朝のニュースレター",
+    design_audit: "UIデザイン定期監査 (アイデアD)"
+};
+
+// 現在選択されているワークフローモード (初期状態は自動判定推奨)
+let selectedMode = 'auto';
+
+// クロック表示
+function updateClock() {
+    const timeDisplay = document.getElementById('time-display');
+    const now = new Date();
+    timeDisplay.textContent = now.toTimeString().split(' ')[0];
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// Inboxスキャン
+async function scanInbox() {
+    const listElement = document.getElementById('inbox-list');
+    try {
+        const response = await fetch('/api/inbox');
+        const files = await response.json();
+        
+        listElement.innerHTML = '';
+        if (files.length === 0) {
+            listElement.innerHTML = '<li class="file-item loading">現在、Inboxには処理すべきファイルはありません。</li>';
+            return;
+        }
+        
+        files.forEach(file => {
+            const li = document.createElement('li');
+            li.className = 'file-item';
+            li.innerHTML = `<span>📄 ${file.name}</span><span class="status-badge" style="background-color:rgba(0, 240, 255, 0.15);color:#00f0ff;">新規検知</span>`;
+            listElement.appendChild(li);
+        });
+    } catch (error) {
+        listElement.innerHTML = '<li class="file-item loading">Inbox フォルダのスキャンに失敗しました。</li>';
+    }
+}
+
+// Pending Approval スキャン
+async function scanPendingApproval() {
+    const listElement = document.getElementById('pending-list');
+    try {
+        const response = await fetch('/api/pending-approval');
+        const files = await response.json();
+        
+        listElement.innerHTML = '';
+        if (files.length === 0) {
+            listElement.innerHTML = '<li class="file-item loading">現在、承認待ちの成果物はありません。</li>';
+            return;
+        }
+        
+        files.forEach(file => {
+            const li = document.createElement('li');
+            li.className = 'file-item';
+            li.style.borderLeftColor = '#f59e0b';
+            
+            const icon = file.type === 'directory' ? '📁' : '📄';
+            li.innerHTML = `<span>${icon} ${file.name}</span><span class="status-badge" style="background-color:rgba(245, 158, 11, 0.15);color:#f59e0b;">承認待ち</span>`;
+            listElement.appendChild(li);
+        });
+    } catch (error) {
+        listElement.innerHTML = '<li class="file-item loading">承認待ちフォルダのスキャンに失敗しました。</li>';
+    }
+}
+
+// クラウド定期監視ステータスの取得
+async function updateWatcherStatus() {
+    const lockBadge = document.getElementById('watcher-lock-status');
+    const errorCountSpan = document.getElementById('watcher-error-count');
+    const circuitBadge = document.getElementById('watcher-circuit-status');
+    const resetBtn = document.getElementById('btn-reset-watcher');
+    
+    try {
+        const response = await fetch('/api/watcher-status');
+        const status = await response.json();
+        
+        // ロック状況
+        if (status.locked) {
+            lockBadge.textContent = 'ロック中 (実行中)';
+            lockBadge.className = 'status-badge danger';
+            lockBadge.style.backgroundColor = 'rgba(239, 68, 68, 0.15)';
+            lockBadge.style.color = '#ef4444';
+        } else {
+            lockBadge.textContent = '未ロック (待機中)';
+            lockBadge.className = 'status-badge normal';
+            lockBadge.style.backgroundColor = 'rgba(16, 185, 129, 0.15)';
+            lockBadge.style.color = '#10b981';
+        }
+        
+        // エラー数
+        errorCountSpan.textContent = `${status.consecutive_errors} / 3`;
+        if (status.consecutive_errors > 0) {
+            errorCountSpan.style.color = '#f59e0b';
+        } else {
+            errorCountSpan.style.color = '';
+        }
+        
+        // サーキットブレーカー
+        if (status.circuit_broken) {
+            circuitBadge.textContent = '停止中 (要確認)';
+            circuitBadge.className = 'status-badge danger';
+            circuitBadge.style.backgroundColor = 'rgba(239, 68, 68, 0.15)';
+            circuitBadge.style.color = '#ef4444';
+            resetBtn.style.display = 'block';
+        } else {
+            circuitBadge.textContent = '正常稼働中';
+            circuitBadge.className = 'status-badge normal';
+            circuitBadge.style.backgroundColor = 'rgba(16, 185, 129, 0.15)';
+            circuitBadge.style.color = '#10b981';
+            resetBtn.style.display = 'none';
+        }
+        
+    } catch (error) {
+        console.error("Failed to fetch watcher status: ", error);
+    }
+}
+
+// 監視ステータスの手動リセット
+async function resetWatcherStatus() {
+    if (!confirm("安全装置（サーキットブレーカー）を解除し、多重起動ロックを強制リセットしますか？")) {
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/reset-watcher', { method: 'POST' });
+        const result = await response.json();
+        
+        if (result.status === 'success') {
+            alert("リセットに成功しました。監視を再開します。");
+            updateWatcherStatus();
+        } else {
+            alert("リセットに失敗しました: " + result.message);
+        }
+    } catch (error) {
+        alert("リセット処理でエラーが発生しました。");
+    }
+}
+
+// 1. ボタンを押した時は「説明の切り替えと選択状態の保持」のみを行う
+function selectWorkflowMode(mode) {
+    selectedMode = mode;
+    
+    // 全ボタンのスタイルを一旦非選択にリセット
+    const individualButtons = document.querySelectorAll('#mode-btn-container button');
+    individualButtons.forEach(btn => {
+        btn.className = 'btn btn-secondary';
+    });
+
+    const autoBtn = document.getElementById('btn-auto');
+    if (autoBtn) {
+        autoBtn.classList.remove('active');
+    }
+
+    // 選択されたボタンをアクティブ（ハイライト）にする
+    if (mode === 'auto') {
+        if (autoBtn) autoBtn.classList.add('active');
+    } else {
+        const activeBtn = document.getElementById(`btn-${mode}`);
+        if (activeBtn) {
+            activeBtn.className = 'btn btn-primary';
+        }
+    }
+
+    // 説明文のアップデート
+    const descBox = document.getElementById('workflow-desc');
+    descBox.innerHTML = workflowDescriptions[mode] || "カスタム指示を実行します。";
+    descBox.classList.add('active');
+}
+
+// 2. 下部の「実行する」を押した時に確認画面をポップアップ
+function triggerConfirmModal() {
+    const modal = document.getElementById('start-modal');
+    const title = document.getElementById('start-modal-title');
+    const msg = document.getElementById('start-modal-msg');
+    const executeBtn = document.getElementById('start-modal-execute-btn');
+
+    const modeName = workflowNames[selectedMode] || "カスタムモード";
+    const inputVal = document.getElementById('workflow-input').value;
+
+    title.textContent = `${modeName} を開始しますか？`;
+    
+    if (inputVal) {
+        msg.innerHTML = `選択された <strong>${modeName}</strong> を、以下の追加指示を添えて開始します。<br><br><span style="color:#00f0ff; font-style:italic;">「${inputVal}」</span>`;
+    } else {
+        msg.innerHTML = `選択された <strong>${modeName}</strong> を開始してよろしいですか？<br>各部門（エージェント）が連携して自律処理を起動します。`;
+    }
+    
+    // 実行ボタンに実際の処理をバインド
+    executeBtn.onclick = () => {
+        closeStartModal();
+        runWorkflow(selectedMode);
+    };
+
+    modal.classList.add('active');
+}
+
+// 実行前モーダルを閉じる
+function closeStartModal() {
+    const modal = document.getElementById('start-modal');
+    modal.classList.remove('active');
+}
+
+// 3. 実際のワークフロー実行処理（進行シミュレーション）
+async function runWorkflow(mode) {
+    resetProgress();
+    setAgentStatus('agent-ops', 50, '判定・初期化中...', true);
+    
+    setTimeout(() => {
+        setAgentStatus('agent-ops', 100, '処理プロセス開始', false);
+        simulateWorkflowRun(mode);
+    }, 1000);
+}
+
+// 進捗リセット
+function resetProgress() {
+    const bars = document.querySelectorAll('.progress-bar');
+    const labels = document.querySelectorAll('.agent-label');
+    const rows = document.querySelectorAll('.agent-row');
+    
+    bars.forEach(bar => bar.style.width = '0%');
+    labels.forEach(label => label.textContent = '待機中');
+    rows.forEach(row => row.classList.remove('active'));
+}
+
+// エージェント進捗セット
+function setAgentStatus(elementId, percentage, label, isActive) {
+    const row = document.getElementById(elementId);
+    const bar = row.querySelector('.progress-bar');
+    const labelSpan = row.querySelector('.agent-label');
+    
+    bar.style.width = `${percentage}%`;
+    labelSpan.textContent = label;
+    if (isActive) {
+        row.classList.add('active');
+    } else {
+        row.classList.remove('active');
+    }
+}
+
+// ワークフローのシミュレーション表示 (デモ用)
+function simulateWorkflowRun(mode) {
+    const previewArea = document.getElementById('preview-content');
+    previewArea.innerHTML = '<p class="preview-placeholder">AIエージェントが連携して処理を実行中...</p>';
+    
+    let resolvedMode = mode;
+    // 自動判定時のダミーシミュレーション用
+    if (mode === 'auto') {
+        resolvedMode = 'research'; // デモでは市場調査モードが自動で選ばれたことにする
+    }
+
+    // Research
+    setTimeout(() => {
+        if (mode === 'auto') {
+            setAgentStatus('agent-ops', 100, '自動判定完了：市場調査モード', false);
+        }
+        setAgentStatus('agent-research', 80, '情報調査・競合比較分析中...', true);
+    }, 1500);
+    
+    // Creative
+    setTimeout(() => {
+        setAgentStatus('agent-research', 100, '調査完了', false);
+        setAgentStatus('agent-creative', 70, 'コンテンツ・ロードマップ執筆中...', true);
+    }, 3500);
+    
+    // Design
+    setTimeout(() => {
+        setAgentStatus('agent-creative', 100, '執筆完了', false);
+        setAgentStatus('agent-design', 90, 'レイアウト・色彩美的監査中...', true);
+    }, 6000);
+    
+    // QA
+    setTimeout(() => {
+        setAgentStatus('agent-design', 100, 'デザイン監査合格', false);
+        setAgentStatus('agent-qa', 90, '検証・ファクト二重検証中...', true);
+    }, 8000);
+    
+    // Complete
+    setTimeout(() => {
+        setAgentStatus('agent-qa', 100, '検証・監査合格', false);
+        
+        let modeName = "自動判定モード";
+        let folderName = "Outputs/";
+        if (resolvedMode === 'blog') { modeName = "ブログ記事モード"; folderName += "blog_post_result.md"; }
+        else if (resolvedMode === 'dev') { modeName = "開発コード生成モード"; folderName += "dashboard/"; }
+        else if (resolvedMode === 'bugfix') { modeName = "バグ修正モード"; folderName += "bugfixes/"; }
+        else if (resolvedMode === 'research') { modeName = "市場調査モード"; folderName += "research/"; }
+        else if (resolvedMode === 'ui_update') { modeName = "UIデザイン更新モード"; folderName += "dashboard/"; }
+        else if (resolvedMode === 'newsletter') { modeName = "ニュースレターモード"; folderName += "newsletters/"; }
+        else if (resolvedMode === 'design_audit') { modeName = "UIデザイン定期監査モード"; folderName += "design_audit_roadmap.md"; }
+
+        // プレビュー表示
+        previewArea.innerHTML = `
+            <div style="font-family: 'Inter'; font-size:14px; line-height:1.6;">
+                <h3 style="color:#00f0ff;font-family:'Outfit';margin-bottom:12px;display:flex;align-items:center;gap:8px;">
+                    🎉 成果物の生成に成功しました
+                </h3>
+                <p style="margin-bottom:14px;color:#9ca3af;font-size:12px;">実行されたモード: ${modeName}</p>
+                <div style="background-color:rgba(255,255,255,0.03);padding:16px;border-radius:10px;border:1px solid rgba(255,255,255,0.06);margin-bottom:12px;">
+                    <h4 style="color:#9d00ff;font-size:13px;margin-bottom:8px;font-family:'Outfit';">【保存された成果物】</h4>
+                    <p style="font-size:12px;color:#f3f4f6;">
+                        - 保存先: <span style="color:#00f0ff;">${folderName}</span><br>
+                        - AIが自律的に要求を満たし、品質チェックと監査を通して成果物を書き出しました。<br>
+                        - 処理が終了し、安全ロックは正常に解除されました。
+                    </p>
+                </div>
+            </div>
+        `;
+        
+        // 完了モーダル表示
+        showConfirmModal(`${modeName}`);
+        
+        // リストの即時更新
+        scanInbox();
+        scanPendingApproval();
+        updateWatcherStatus();
+    }, 10000);
+}
+
+// 完了モーダル表示
+function showConfirmModal(modeName) {
+    const modal = document.getElementById('confirm-modal');
+    const msg = document.getElementById('modal-msg');
+    msg.innerHTML = `<strong>【${modeName}】</strong> の自動処理がすべて完了しました。<br>各監査・品質テストをすべて通過し、完成版アセットが保存されました。`;
+    modal.classList.add('active');
+}
+
+// 完了モーダル閉じる
+function closeModal() {
+    const modal = document.getElementById('confirm-modal');
+    const msg = document.getElementById('modal-msg');
+    modal.classList.remove('active');
+}
+
+// 起動時処理
+window.onload = () => {
+    updateClock();
+    
+    // 初回読み込み
+    scanInbox();
+    scanPendingApproval();
+    updateWatcherStatus();
+    
+    // 定期フェッチの開始 (5秒ごと)
+    setInterval(() => {
+        scanInbox();
+        scanPendingApproval();
+        updateWatcherStatus();
+    }, 5000);
+    
+    // デフォルトで「自動判定モード」を選択状態にし、ハイライトする
+    selectWorkflowMode('auto');
+};

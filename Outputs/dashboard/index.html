@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tandy.inc 統合操作パネル</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- Google Fonts Outfit & Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;700&family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- ① 実行前の確認ポップアップ (誤操作防止用) -->
+    <div class="modal-overlay" id="start-modal">
+        <div class="modal-content glass" style="box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5), 0 0 30px rgba(157, 0, 255, 0.15);">
+            <div class="confirm-icon">?</div>
+            <h3 class="modal-title" id="start-modal-title">ワークフローを開始しますか？</h3>
+            <p class="modal-message" id="start-modal-msg">選択したモードを開始します。</p>
+            <div class="modal-buttons" style="display:flex;gap:12px;width:100%;">
+                <button class="btn btn-secondary" onclick="closeStartModal()" style="flex:1;">キャンセル</button>
+                <button class="btn btn-primary" id="start-modal-execute-btn" style="flex:1;">実行する</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ② 完了アラートモーダル (実行確認用) -->
+    <div class="modal-overlay" id="confirm-modal">
+        <div class="modal-content glass">
+            <div class="success-icon">✓</div>
+            <h3 class="modal-title">ワークフロー実行完了</h3>
+            <p class="modal-message" id="modal-msg">処理が正常に完了しました。</p>
+            <button class="btn btn-primary" onclick="closeModal()" style="width:100%;">確認しました</button>
+        </div>
+    </div>
+
+    <div class="dashboard-container">
+        <!-- サイドバー -->
+        <aside class="sidebar">
+            <div class="logo-area">
+                <span class="logo-text">Tandy<span>.inc</span></span>
+                <span class="status-badge live">オンライン</span>
+            </div>
+            <nav class="nav-menu">
+                <button class="nav-item active" data-tab="ops">操作パネル</button>
+                <button class="nav-item" data-tab="gallery">ポートフォリオ連携</button>
+                <button class="nav-item" data-tab="docs" onclick="window.open('file:///g:/%E3%83%9E%E3%82%A4%E3%83%89%E3%83%A9%E3%82%A4%E3%83%96/02_AI%20Campany/Tandy.inc/ORGANIZATION.md', '_blank')">組織マニュアル</button>
+            </nav>
+            <div class="sidebar-footer">
+                <span class="user-role">権限: CEO (経営陣)</span>
+                <span class="user-status">状態: 接続完了</span>
+            </div>
+        </aside>
+
+        <!-- メインコンテンツ -->
+        <main class="main-content">
+            <header class="header">
+                <h1>Tandy.inc 統合操作パネル</h1>
+                <div class="time-display" id="time-display">00:00:00</div>
+            </header>
+
+            <div class="dashboard-grid">
+                <!-- 左側カラム: コントロール & モニター -->
+                <div class="left-column">
+                    <!-- 1. ワークフロー操作パネル -->
+                    <section class="card glass">
+                        <h2 class="card-title">自動ワークフローの実行</h2>
+                        
+                        <div class="workflow-section">
+                            <!-- メイン：自動判定実行ボタン (最優先) -->
+                            <button class="btn btn-primary btn-auto-detect" id="btn-auto" onclick="selectWorkflowMode('auto')" style="width:100%; margin-bottom:16px; font-size:16px; padding:16px;">
+                                🚀 Inboxのファイルを自動判定して実行
+                            </button>
+
+                            <p style="font-size: 11px; color: var(--text-muted); margin-bottom: 8px; font-weight: 600;">手動でモードを指定して実行する場合：</p>
+                            
+                            <!-- サブ：個別選択ボタン群 -->
+                            <div class="workflow-buttons" id="mode-btn-container">
+                                <button class="btn btn-secondary" id="btn-blog" onclick="selectWorkflowMode('blog')">ブログ記事モード</button>
+                                <button class="btn btn-secondary" id="btn-dev" onclick="selectWorkflowMode('dev')">開発コード生成</button>
+                                <button class="btn btn-secondary" id="btn-bugfix" onclick="selectWorkflowMode('bugfix')">バグ修正モード</button>
+                                <button class="btn btn-secondary" id="btn-research" onclick="selectWorkflowMode('research')">市場調査モード</button>
+                                <button class="btn btn-secondary" id="btn-ui_update" onclick="selectWorkflowMode('ui_update')">UIデザイン更新</button>
+                                <button class="btn btn-secondary" id="btn-newsletter" onclick="selectWorkflowMode('newsletter')">朝のニュースレター</button>
+                                <button class="btn btn-secondary" id="btn-design_audit" onclick="selectWorkflowMode('design_audit')">UIデザイン定期監査 (アイデアD)</button>
+                            </div>
+                            
+                            <!-- ワークフローの動的説明文 -->
+                            <div class="workflow-description-box" id="workflow-desc">
+                                上のボタンを選択すると、ここにモードの説明が表示されます。内容を確認し、下の「実行する」ボタンで開始します。
+                            </div>
+                        </div>
+
+                        <div class="input-group">
+                            <input type="text" id="workflow-input" placeholder="追加の指示やキーワードをここに入力（任意）...">
+                            <button class="btn btn-execute" onclick="triggerConfirmModal()">実行する</button>
+                        </div>
+                    </section>
+
+                    <!-- 2. Inbox監視モニター -->
+                    <section class="card glass">
+                        <h2 class="card-title">インプット（新規ファイル）の監視</h2>
+                        <ul class="file-list" id="inbox-list">
+                            <li class="file-item loading">Inbox フォルダをスキャン中...</li>
+                        </ul>
+                    </section>
+
+                    <!-- 新設: クラウド監視ステータス -->
+                    <section class="card glass">
+                        <h2 class="card-title">☁️ クラウド定期監視ステータス</h2>
+                        <div class="watcher-status-box">
+                            <div class="watcher-status-item">
+                                <span>多重起動ロック:</span>
+                                <span id="watcher-lock-status" class="status-badge normal">未ロック</span>
+                            </div>
+                            <div class="watcher-status-item">
+                                <span>連続エラー数:</span>
+                                <span id="watcher-error-count">0 / 3</span>
+                            </div>
+                            <div class="watcher-status-item">
+                                <span>安全装置（サーキットブレーキ）:</span>
+                                <span id="watcher-circuit-status" class="status-badge normal">正常稼働中</span>
+                            </div>
+                        </div>
+                        <button class="btn btn-secondary btn-reset-watcher" id="btn-reset-watcher" onclick="resetWatcherStatus()" style="width: 100%; margin-top: 12px; font-size: 12px; display: none;">
+                            🔧 サーキットブレーカーを復旧する (安全装置の解除)
+                        </button>
+                    </section>
+
+                    <!-- 新設: Pending_Approval 承認待ち成果物 -->
+                    <section class="card glass">
+                        <h2 class="card-title">⚠️ 承認待ちの成果物 (Pending Approval)</h2>
+                        <p style="font-size: 11px; color: var(--text-muted); margin-bottom: 8px;">
+                            自動監査で高リスク（ハルシネーション等の疑い）と判定され、隔離された成果物です。
+                        </p>
+                        <ul class="file-list" id="pending-list">
+                            <li class="file-item loading">承認待ちのファイルをスキャン中...</li>
+                        </ul>
+                    </section>
+                </div>
+
+                <!-- 右側カラム: 進捗ステータス & プレビュー -->
+                <div class="right-column">
+                    <!-- 3. 各部門のエージェント活動状況 -->
+                    <section class="card glass">
+                        <h2 class="card-title">各部門（エージェント）の稼働状況</h2>
+                        <div class="agent-status-container">
+                            <div class="agent-row" id="agent-ops">
+                                <span class="agent-name">運営部門 (Operations)</span>
+                                <div class="progress-bar-bg"><div class="progress-bar" style="width: 0%"></div></div>
+                                <span class="agent-label">待機中</span>
+                            </div>
+                            <div class="agent-row" id="agent-research">
+                                <span class="agent-name">リサーチ部門 (Research)</span>
+                                <div class="progress-bar-bg"><div class="progress-bar" style="width: 0%"></div></div>
+                                <span class="agent-label">待機中</span>
+                            </div>
+                            <div class="agent-row" id="agent-creative">
+                                <span class="agent-name">制作・開発部門 (Creative)</span>
+                                <div class="progress-bar-bg"><div class="progress-bar" style="width: 0%"></div></div>
+                                <span class="agent-label">待機中</span>
+                            </div>
+                            <div class="agent-row" id="agent-design">
+                                <span class="agent-name">デザイン監査部門 (UIUX Design)</span>
+                                <div class="progress-bar-bg"><div class="progress-bar" style="width: 0%"></div></div>
+                                <span class="agent-label">待機中</span>
+                            </div>
+                            <div class="agent-row" id="agent-qa">
+                                <span class="agent-name">品質保証・テスト部門 (QA Engineering)</span>
+                                <div class="progress-bar-bg"><div class="progress-bar" style="width: 0%"></div></div>
+                                <span class="agent-label">待機中</span>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- 4. 成果物プレビューエリア -->
+                    <section class="card glass preview-card">
+                        <h2 class="card-title">成果物のリアルタイムプレビュー</h2>
+                        <div class="preview-area" id="preview-content">
+                            <p class="preview-placeholder">ワークフローが実行されると、ここに成果物の詳細プレビューが表示されます。</p>
+                        </div>
+                    </section>
+                </div>
+            </div>
+        </main>
+    </div>
+    <script src="app.js"></script>
+</body>
+</html>
