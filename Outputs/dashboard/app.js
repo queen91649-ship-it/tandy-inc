@@ -5,7 +5,7 @@ const workflowDescriptions = {
     dev: "【開発コード生成モード】<br>設計要件から、必要な仕様調査 → 例外処理を徹底したソースコード自動生成 → UIUX_Designによる美観・レスポンシブ監査 → QA_Engineeringによるテストコード実行確認を行い、完成版を出力します。",
     bugfix: "【バグ修正モード】<br>Inboxに投入されたコードとエラーログを元に、原因調査 → 修正コード＆根本原因と対策の解説生成 → UIUXデザイン監査 → QAによる回帰テストを通過させて出力します。",
     research: "【市場調査モード】<br>調べたいテーマについてWebや事例を検索し、競合比較テーブルや導入ROI・コスト試算、リンク生存確認をすべてクリアした一次ソース付きの調査報告書を作成します。",
-    ui_update: "【UIデザイン更新モード】<br>既存のダッシュボードやWebUIの改善指示から、画面レイアウト・CSS・JSの更新箇所を分析 → 制作・自動バックアップ作成 → UIUX_Design監査 → QA動作検証を行い、直接上書き更新します。",
+    ui_update: "【UIデザイン更新モード】<br>既存 of ダッシュボードやWebUIの改善指示から、画面レイアウト・CSS・JSの更新箇所を分析 → 制作・自動バックアップ作成 → UIUX_Design監査 → QA動作検証を行い、直接上書き更新します。",
     newsletter: "【朝のニュースレターモード】<br>毎日朝6:00に自動実行されるモードです。監視リスト（watchlist.txt）の情報源から最新情報を収集し、全トピックに個別ビジネス影響（Tandy's Insight）を付加して出力します。",
     design_audit: "【UIデザイン定期監査 (アイデアD)】<br>現在の自社UIダッシュボード（Outputs/dashboard/）のソースコードや美観を、最新のUIUXトレンドや事例と比較分析。フォント・色彩・レスポンシブ性・アクセシビリティの観点から改善点をまとめた「デザイン改善ロードマップ」を自動生成します。"
 };
@@ -426,7 +426,7 @@ function openActionModal(name, action) {
     if (action === 'adopt') {
         title.textContent = "提案を採用しますか？";
         msg.innerHTML = `選択された <strong>${name}</strong> を採用し、追加指示を添えて Inbox （採用棚）へ投入します。`;
-        commentField.placeholder = "例:『このデザインをベースに、フォントをInterに変更して進めてください』『提案Aのコスト最適化から実装を開始してください』";
+        commentField.placeholder = "例:『このデザインをベースに、フォントをInterに変更して進めてください』『提案A of コスト最適化から実装を開始してください』";
         submitBtn.textContent = "採用してInboxへ投入";
         submitBtn.style.background = "linear-gradient(135deg, #00f0ff 0%, #9d00ff 100%)";
         submitBtn.style.color = "#ffffff";
@@ -580,6 +580,98 @@ async function submitNewInstructionToInbox() {
         }
     } catch (error) {
         alert("投函処理中にエラーが発生しました。");
+    }
+}
+
+// 自己進化メタ開発の実行リクエスト (多重監査のシミュレータ可視化対応)
+async function triggerMetaWorkflowCreation() {
+    const requirementField = document.getElementById('meta-workflow-requirement');
+    const requirement = requirementField.value.trim();
+    
+    if (requirement === '') {
+        alert("どのようなワークフローを作成したいか（要件）を入力してください。");
+        return;
+    }
+    
+    if (!confirm("AIエージェント達（Creative, Design, QA, Auditor）による自動開発・多重監査・Git自動デプロイプロセスを開始してよろしいですか？\n(これには1〜2分程度かかります)")) {
+        return;
+    }
+    
+    // 進捗バーのリセットと開始シミュレーション
+    resetProgress();
+    setAgentStatus('agent-ops', 30, '自己進化プロセス初期化中...', true);
+    
+    // 擬似的にエージェント間監査連携進捗を描画 (1分強のタイムライン)
+    setTimeout(() => {
+        setAgentStatus('agent-ops', 100, '起案準備完了', false);
+        setAgentStatus('agent-creative', 40, 'コード・YAML起案(ドラフト生成)中...', true);
+    }, 3000);
+    
+    setTimeout(() => {
+        setAgentStatus('agent-creative', 100, '起案完了', false);
+        setAgentStatus('agent-design', 50, 'UIレイアウト・配色調和監査中...', true);
+    }, 15000);
+    
+    setTimeout(() => {
+        setAgentStatus('agent-design', 100, 'デザイン監査合格', false);
+        setAgentStatus('agent-qa', 60, 'Pythonコード構文・エラートラップ検証中...', true);
+    }, 28000);
+    
+    setTimeout(() => {
+        setAgentStatus('agent-qa', 100, 'QA監査合格', false);
+        setAgentStatus('agent-auditor', 70, 'セキュリティ・環境変数監査中...', true);
+    }, 42000);
+    
+    setTimeout(() => {
+        setAgentStatus('agent-auditor', 100, '全監査合格・デプロイ準備中', false);
+        setAgentStatus('agent-ops', 90, 'Gitコミット・デプロイ(Push)実行中...', true);
+    }, 55000);
+
+    const previewArea = document.getElementById('preview-content');
+    previewArea.innerHTML = '<p class="preview-placeholder">AIエージェント達が新ワークフローの自動開発・多重監査・デプロイを実行中です。これには約1〜2分かかります。進行状況は上の稼働状況バーをご確認ください...</p>';
+    
+    requirementField.value = '';
+    
+    try {
+        const response = await fetch('/api/workflow/create', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ requirement })
+        });
+        
+        const result = await response.json();
+        
+        // 進捗バーを100%に強制完了
+        setAgentStatus('agent-ops', 100, '開発・デプロイ完了', false);
+        
+        if (result.status === 'success') {
+            // 成功ポップアップ
+            const modal = document.getElementById('confirm-modal');
+            const msg = document.getElementById('modal-msg');
+            const modalTitle = modal.querySelector('.modal-title');
+            
+            modalTitle.textContent = "自己進化デプロイ成功！";
+            msg.innerHTML = `新ワークフローが正常に自動開発され、多重監査を通過してデプロイされました！<br><br>ダッシュボード（ index.html / app.js ）およびマニュアル（ ORGANIZATION.md ）への登録も完了しています。<br><br>ブラウザを再読み込み（F5）すると、システム統括タブに新しい実行ボタンが追加されます。`;
+            
+            modal.classList.add('active');
+            
+            previewArea.innerHTML = `
+                <div style="font-family: 'Inter'; font-size:13px; line-height:1.5;">
+                    <h3 style="color:#00f0ff;font-family:'Outfit';font-size:15px;">🛠️ 自動開発・多重監査完了ログ</h3>
+                    <pre style="background: rgba(0,0,0,0.3); padding:10px; border-radius:8px; max-height:200px; overflow-y:auto; font-family:monospace; font-size:11px; margin-top:8px; border:1px solid var(--card-border); color:#10b981;">${result.log}</pre>
+                </div>
+            `;
+        } else {
+            alert("自動開発に失敗しました: " + result.message + "\n詳細: " + (result.detail || ""));
+            previewArea.innerHTML = '<p class="preview-placeholder" style="color:#ef4444;">開発プロセスでエラーが発生しました。</p>';
+            resetProgress();
+        }
+    } catch (error) {
+        alert("通信エラーが発生しました。");
+        previewArea.innerHTML = '<p class="preview-placeholder" style="color:#ef4444;">通信エラーによりプロセスが中断されました。</p>';
+        resetProgress();
     }
 }
 

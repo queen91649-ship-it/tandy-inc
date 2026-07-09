@@ -180,6 +180,20 @@
                                 <li class="file-item loading">Inbox フォルダをスキャン中...</li>
                             </ul>
                         </section>
+
+                        <!-- 新設: 🛠️ 新規ワークフローの自動開発 (自己進化) -->
+                        <section class="card glass">
+                            <h2 class="card-title">🛠️ 新規ワークフローの自動開発 (自己進化)</h2>
+                            <p style="font-size: 11px; color: var(--text-muted); margin-bottom: 12px;">
+                                作りたい自動化処理を自然言語で指示すると、AIエージェント達（Creative, Design, QA, Auditor）が自動で起案・多段監査・修正を行い、ダッシュボードへ登録して自動デプロイします。
+                            </p>
+                            <div style="margin-bottom: 16px;">
+                                <textarea id="meta-workflow-requirement" placeholder="例:『毎週金曜の朝10時に、自社のGitHubリポジトリのスター数を集計し、Outputs/github_report.md に書き出すワークフローを作ってください』" style="width: 100%; height: 100px; background-color: rgba(0,0,0,0.2); border: 1px solid var(--card-border); border-radius: 10px; padding: 12px; color: var(--text-main); font-family: var(--font-inter); font-size: 13px; resize: none;"></textarea>
+                            </div>
+                            <button class="btn btn-primary" onclick="triggerMetaWorkflowCreation()" style="width: 100%; font-weight:700; background: linear-gradient(135deg, #9d00ff 0%, #00f0ff 100%); color:#ffffff;">
+                                🛠️ 開発・多段監査・デプロイを実行する
+                            </button>
+                        </section>
                     </div>
     
                     <!-- 右側カラム: 進捗ステータス & プレビュー -->

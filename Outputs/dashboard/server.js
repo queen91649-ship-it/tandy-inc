@@ -515,6 +515,56 @@ const server = http.createServer((req, res) => {
         return;
     }
 
+    // API 6: 自己進化メタ開発リクエスト (新規ワークフローの自律開発)
+    if (req.url === '/api/workflow/create' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => {
+            body += chunk.toString();
+        });
+        
+        req.on('end', () => {
+            try {
+                const data = JSON.parse(body);
+                const requirement = data.requirement ? data.requirement.trim() : '';
+                
+                if (requirement === '') {
+                    res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
+                    res.end(JSON.stringify({ status: 'error', message: 'Requirement cannot be empty.' }));
+                    return;
+                }
+                
+                const { exec } = require('child_process');
+                
+                // コマンドのサニタイズ（ダブルクォーテーションのエスケープ）
+                const sanitizedReq = requirement.replace(/"/g, '\\"');
+                const scriptPath = path.join(DIRECTORY, 'tandy_meta_creator.py');
+                const command = `python "${scriptPath}" "${sanitizedReq}"`;
+                
+                console.log(`[Self-Evolution] 起動コマンド: ${command}`);
+                
+                // 実行の完了を待ってからレスポンスを返す
+                exec(command, { env: process.env }, (error, stdout, stderr) => {
+                    if (error) {
+                        console.error(`[Self-Evolution Error] code: ${error.code}`, stderr);
+                        res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+                        res.end(JSON.stringify({ status: 'error', message: 'Workflow development failed.', detail: stderr || stdout }));
+                        return;
+                    }
+                    
+                    console.log(`[Self-Evolution Success]`, stdout);
+                    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+                    res.end(JSON.stringify({ status: 'success', message: 'New workflow developed and deployed successfully.', log: stdout }));
+                });
+                
+            } catch (error) {
+                console.error("Error triggering meta workflow creation: ", error);
+                res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+                res.end(JSON.stringify({ status: 'error', message: 'Internal Server Error' }));
+            }
+        });
+        return;
+    }
+
     // 静的ファイルの配信 (HTML/CSS/JS)
     let filePath = path.join(DIRECTORY, req.url === '/' ? 'index.html' : req.url);
     const extname = path.extname(filePath);
