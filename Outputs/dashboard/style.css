@@ -604,6 +604,41 @@ body {
     box-shadow: 0 0 10px rgba(0, 240, 255, 0.15) !important;
 }
 
+/* --- スケジュールテーブルスタイル --- */
+#schedule-table th, #schedule-table td {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    transition: all 0.2s ease;
+}
+
+#schedule-table tbody tr {
+    cursor: default;
+}
+
+#schedule-table tbody tr:hover td {
+    background-color: rgba(0, 240, 255, 0.03);
+    color: #ffffff;
+}
+
+#schedule-table td {
+    padding: 14px 10px;
+    font-size: 13px;
+    vertical-align: middle;
+}
+
+#schedule-table th {
+    font-family: var(--font-outfit);
+    font-size: 13px;
+    letter-spacing: 0.5px;
+}
+
+/* スケジュールリストバッジ定義 */
+.status-badge.sched-cron {
+    background-color: rgba(255, 255, 255, 0.08) !important;
+    color: #e5e7eb !important;
+    font-family: monospace;
+    font-size: 11px;
+}
+
 
 
 

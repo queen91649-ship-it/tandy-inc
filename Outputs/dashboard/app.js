@@ -72,9 +72,13 @@ function initTabs() {
                 scanPendingApproval();
             } else if (targetTab === 'proposals') {
                 loadProposals();
-            } else if (targetTab === 'ops') {
-                scanInbox();
+            } else if (targetTab === 'scheduler') {
+                loadSchedules();
                 updateWatcherStatus();
+            } else if (targetTab === 'workflows') {
+                scanInbox();
+            } else if (targetTab === 'evolution') {
+                resetProgress();
             }
         });
     });
@@ -282,6 +286,51 @@ async function executePendingAction(name, action) {
         }
     } catch (err) {
         alert("通信エラーが発生しました。");
+    }
+}
+
+// スケジュール設定情報の取得 ＆ テーブル描画
+async function loadSchedules() {
+    const listElement = document.getElementById('schedule-table-body');
+    if (!listElement) return;
+
+    try {
+        const response = await fetch('/api/schedules');
+        const schedules = await response.json();
+
+        listElement.innerHTML = '';
+        if (schedules.length === 0) {
+            listElement.innerHTML = '<tr><td colspan="4" style="padding: 20px; text-align: center; color: var(--text-muted);">定期スケジュールタスクは見つかりませんでした。</td></tr>';
+            return;
+        }
+
+        schedules.forEach(s => {
+            const tr = document.createElement('tr');
+            
+            // 部門に応じたバッジ色の設定
+            let deptBadgeClass = 'status-badge';
+            if (s.department === '運営・総務部門') {
+                deptBadgeClass += ' dept-creative';
+            } else if (s.department === '経営・統括部門 (審査会)') {
+                deptBadgeClass += ' dept-ceo';
+            } else if (s.department === '出版事業部') {
+                deptBadgeClass += ' dept-auditor';
+            }
+
+            tr.innerHTML = `
+                <td style="padding: 14px 10px; font-weight: 600; color: #f3f4f6;">⏱️ ${s.name}</td>
+                <td style="padding: 14px 10px;">
+                    <span class="status-badge" style="background-color: rgba(157, 0, 255, 0.12); color: #9d00ff; font-weight: 600;">${s.scheduleJST}</span>
+                    <span class="status-badge sched-cron" style="margin-left: 8px;">${s.cron}</span>
+                </td>
+                <td style="padding: 14px 10px; font-family: monospace; color: #00f0ff;">${s.script}</td>
+                <td style="padding: 14px 10px;"><span class="${deptBadgeClass}">${s.department}</span></td>
+            `;
+            listElement.appendChild(tr);
+        });
+
+    } catch (error) {
+        listElement.innerHTML = '<tr><td colspan="4" style="padding: 20px; text-align: center; color: #ef4444;">スケジュールの取得に失敗しました。</td></tr>';
     }
 }
 
@@ -599,35 +648,35 @@ async function triggerMetaWorkflowCreation() {
     
     // 進捗バーのリセットと開始シミュレーション
     resetProgress();
-    setAgentStatus('agent-ops', 30, '自己進化プロセス初期化中...', true);
+    setAgentStatus('agent-ops-evo', 30, '自己進化プロセス初期化中...', true);
     
     // 擬似的にエージェント間監査連携進捗を描画 (1分強のタイムライン)
     setTimeout(() => {
-        setAgentStatus('agent-ops', 100, '起案準備完了', false);
-        setAgentStatus('agent-creative', 40, 'コード・YAML起案(ドラフト生成)中...', true);
+        setAgentStatus('agent-ops-evo', 100, '起案準備完了', false);
+        setAgentStatus('agent-creative-evo', 40, 'コード・YAML起案(ドラフト生成)中...', true);
     }, 3000);
     
     setTimeout(() => {
-        setAgentStatus('agent-creative', 100, '起案完了', false);
-        setAgentStatus('agent-design', 50, 'UIレイアウト・配色調和監査中...', true);
+        setAgentStatus('agent-creative-evo', 100, '起案完了', false);
+        setAgentStatus('agent-design-evo', 50, 'UIレイアウト・配色調和監査中...', true);
     }, 15000);
     
     setTimeout(() => {
-        setAgentStatus('agent-design', 100, 'デザイン監査合格', false);
-        setAgentStatus('agent-qa', 60, 'Pythonコード構文・エラートラップ検証中...', true);
+        setAgentStatus('agent-design-evo', 100, 'デザイン監査合格', false);
+        setAgentStatus('agent-qa-evo', 60, 'Pythonコード構文・エラートラップ検証中...', true);
     }, 28000);
     
     setTimeout(() => {
-        setAgentStatus('agent-qa', 100, 'QA監査合格', false);
-        setAgentStatus('agent-auditor', 70, 'セキュリティ・環境変数監査中...', true);
+        setAgentStatus('agent-qa-evo', 100, 'QA監査合格', false);
+        setAgentStatus('agent-auditor-evo', 70, 'セキュリティ・環境変数監査中...', true);
     }, 42000);
     
     setTimeout(() => {
-        setAgentStatus('agent-auditor', 100, '全監査合格・デプロイ準備中', false);
-        setAgentStatus('agent-ops', 90, 'Gitコミット・デプロイ(Push)実行中...', true);
+        setAgentStatus('agent-auditor-evo', 100, '全監査合格・デプロイ準備中', false);
+        setAgentStatus('agent-ops-evo', 90, 'Gitコミット・デプロイ(Push)実行中...', true);
     }, 55000);
 
-    const previewArea = document.getElementById('preview-content');
+    const previewArea = document.getElementById('preview-content-evo');
     previewArea.innerHTML = '<p class="preview-placeholder">AIエージェント達が新ワークフローの自動開発・多重監査・デプロイを実行中です。これには約1〜2分かかります。進行状況は上の稼働状況バーをご確認ください...</p>';
     
     requirementField.value = '';
@@ -644,7 +693,7 @@ async function triggerMetaWorkflowCreation() {
         const result = await response.json();
         
         // 進捗バーを100%に強制完了
-        setAgentStatus('agent-ops', 100, '開発・デプロイ完了', false);
+        setAgentStatus('agent-ops-evo', 100, '開発・デプロイ完了', false);
         
         if (result.status === 'success') {
             // 成功ポップアップ
@@ -923,9 +972,6 @@ function simulateWorkflowRun(mode) {
             </div>
         `;
         
-        // 完了モーダル表示
-        showConfirmModal(`${modeName}`);
-        
         // リストの即時更新
         scanInbox();
         scanPendingApproval();
@@ -962,9 +1008,10 @@ window.onload = () => {
             if (tabName === 'ceo-office') {
                 scanInbox();
                 scanPendingApproval();
-            } else if (tabName === 'ops') {
-                scanInbox();
+            } else if (tabName === 'scheduler') {
                 updateWatcherStatus();
+            } else if (tabName === 'workflows') {
+                scanInbox();
             }
         }
     }, 5000);

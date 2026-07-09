@@ -63,7 +63,9 @@
                 <nav class="nav-menu">
                     <div class="nav-item active" data-tab="ceo-office">🏢 CEO室</div>
                     <div class="nav-item" data-tab="proposals">💡 AIからの提案</div>
-                    <div class="nav-item" data-tab="ops">⚙️ システム統括</div>
+                    <div class="nav-item" data-tab="scheduler">⏱️ スケジュール</div>
+                    <div class="nav-item" data-tab="workflows">⚙️ クイック実行</div>
+                    <div class="nav-item" data-tab="evolution">🛠️ 自己進化</div>
                     <a class="nav-item" href="https://github.com/queen91649-ship-it/tandy-inc" target="_blank" style="text-decoration: none; color: inherit;">🔗 リポジトリ</a>
                     <a class="nav-item" href="file:///g:/マイドライブ/02_AI%20Campany/Tandy.inc/ORGANIZATION.md" target="_blank" style="text-decoration: none; color: inherit;">📖 組織マニュアル</a>
                 </nav>
@@ -136,134 +138,7 @@
                 </div>
             </div>
 
-            <!-- タブ1: システム統括 -->
-            <div class="tab-content" id="ops-tab" style="display: none;">
-                <div class="dashboard-grid">
-                    <!-- 左側カラム: コントロール & モニター -->
-                    <div class="left-column">
-                        <!-- 1. ワークフロー操作パネル -->
-                        <section class="card glass">
-                            <h2 class="card-title">自動ワークフローの実行</h2>
-                            
-                            <div class="workflow-section">
-                                <button class="btn btn-primary btn-auto-detect" id="btn-auto" onclick="selectWorkflowMode('auto')" style="width:100%; margin-bottom:16px; font-size:16px; padding:16px;">
-                                    🚀 Inboxのファイルを自動判定して実行
-                                </button>
-    
-                                <p style="font-size: 11px; color: var(--text-muted); margin-bottom: 8px; font-weight: 600;">手動でモードを指定して実行する場合：</p>
-                                
-                                <div class="workflow-buttons" id="mode-btn-container">
-                                    <button class="btn btn-secondary" id="btn-blog" onclick="selectWorkflowMode('blog')">ブログ記事モード</button>
-                                    <button class="btn btn-secondary" id="btn-dev" onclick="selectWorkflowMode('dev')">開発コード生成</button>
-                                    <button class="btn btn-secondary" id="btn-bugfix" onclick="selectWorkflowMode('bugfix')">バグ修正モード</button>
-                                    <button class="btn btn-secondary" id="btn-research" onclick="selectWorkflowMode('research')">市場調査モード</button>
-                                    <button class="btn btn-secondary" id="btn-ui_update" onclick="selectWorkflowMode('ui_update')">UIデザイン更新</button>
-                                    <button class="btn btn-secondary" id="btn-newsletter" onclick="selectWorkflowMode('newsletter')">朝のニュースレター</button>
-                                    <button class="btn btn-secondary" id="btn-design_audit" onclick="selectWorkflowMode('design_audit')">UIデザイン定期監査 (アイデアD)</button>
-                                </div>
-                                
-                                <div class="workflow-description-box" id="workflow-desc">
-                                    上のボタンを選択すると、ここにモードの説明が表示されます。内容を確認し、下の「実行する」ボタンで開始します。
-                                </div>
-                            </div>
-    
-                            <div class="input-group">
-                                <input type="text" id="workflow-input" placeholder="追加の指示やキーワードをここに入力（任意）...">
-                                <button class="btn btn-execute" onclick="triggerConfirmModal()">実行する</button>
-                            </div>
-                        </section>
-    
-                        <!-- 2. Inbox監視モニター -->
-                        <section class="card glass">
-                            <h2 class="card-title">インプット（新規ファイル）の監視</h2>
-                            <ul class="file-list" id="inbox-list">
-                                <li class="file-item loading">Inbox フォルダをスキャン中...</li>
-                            </ul>
-                        </section>
-
-                        <!-- 新設: 🛠️ 新規ワークフローの自動開発 (自己進化) -->
-                        <section class="card glass">
-                            <h2 class="card-title">🛠️ 新規ワークフローの自動開発 (自己進化)</h2>
-                            <p style="font-size: 11px; color: var(--text-muted); margin-bottom: 12px;">
-                                作りたい自動化処理を自然言語で指示すると、AIエージェント達（Creative, Design, QA, Auditor）が自動で起案・多段監査・修正を行い、ダッシュボードへ登録して自動デプロイします。
-                            </p>
-                            <div style="margin-bottom: 16px;">
-                                <textarea id="meta-workflow-requirement" placeholder="例:『毎週金曜の朝10時に、自社のGitHubリポジトリのスター数を集計し、Outputs/github_report.md に書き出すワークフローを作ってください』" style="width: 100%; height: 100px; background-color: rgba(0,0,0,0.2); border: 1px solid var(--card-border); border-radius: 10px; padding: 12px; color: var(--text-main); font-family: var(--font-inter); font-size: 13px; resize: none;"></textarea>
-                            </div>
-                            <button class="btn btn-primary" onclick="triggerMetaWorkflowCreation()" style="width: 100%; font-weight:700; background: linear-gradient(135deg, #9d00ff 0%, #00f0ff 100%); color:#ffffff;">
-                                🛠️ 開発・多段監査・デプロイを実行する
-                            </button>
-                        </section>
-                    </div>
-    
-                    <!-- 右側カラム: 進捗ステータス & プレビュー -->
-                    <div class="right-column">
-                        <!-- 3. 各部門のエージェント活動状況 -->
-                        <section class="card glass">
-                            <h2 class="card-title">各部門（エージェント）の稼働状況</h2>
-                            <div class="agent-status-container">
-                                <div class="agent-row" id="agent-ops">
-                                    <span class="agent-name">運営部門 (Operations)</span>
-                                    <div class="progress-bar-bg"><div class="progress-bar" style="width: 0%"></div></div>
-                                    <span class="agent-label">待機中</span>
-                                </div>
-                                <div class="agent-row" id="agent-research">
-                                    <span class="agent-name">リサーチ部門 (Research)</span>
-                                    <div class="progress-bar-bg"><div class="progress-bar" style="width: 0%"></div></div>
-                                    <span class="agent-label">待機中</span>
-                                </div>
-                                <div class="agent-row" id="agent-creative">
-                                    <span class="agent-name">制作・開発部門 (Creative)</span>
-                                    <div class="progress-bar-bg"><div class="progress-bar" style="width: 0%"></div></div>
-                                    <span class="agent-label">待機中</span>
-                                </div>
-                                <div class="agent-row" id="agent-design">
-                                    <span class="agent-name">デザイン監査部門 (UIUX Design)</span>
-                                    <div class="progress-bar-bg"><div class="progress-bar" style="width: 0%"></div></div>
-                                    <span class="agent-label">待機中</span>
-                                </div>
-                                <div class="agent-row" id="agent-qa">
-                                    <span class="agent-name">品質保証・テスト部門 (QA Engineering)</span>
-                                    <div class="progress-bar-bg"><div class="progress-bar" style="width: 0%"></div></div>
-                                    <span class="agent-label">待機中</span>
-                                </div>
-                            </div>
-                        </section>
-    
-                        <!-- 4. 成果物プレビューエリア -->
-                        <section class="card glass preview-card">
-                            <h2 class="card-title">成果物のリアルタイムプレビュー</h2>
-                            <div class="preview-area" id="preview-content">
-                                <p class="preview-placeholder">ワークフローが実行されると、ここに成果物の詳細プレビューが表示されます。</p>
-                            </div>
-                        </section>
-
-                        <!-- 5. クラウド監視ステータス -->
-                        <section class="card glass">
-                            <h2 class="card-title">☁️ クラウド定期監視ステータス</h2>
-                            <div class="watcher-status-box">
-                                <div class="watcher-status-item">
-                                    <span>多重起動ロック:</span>
-                                    <span id="watcher-lock-status" class="status-badge normal">未ロック</span>
-                                </div>
-                                <div class="watcher-status-item">
-                                    <span>連続エラー数:</span>
-                                    <span id="watcher-error-count">0 / 3</span>
-                                </div>
-                                <div class="watcher-status-item">
-                                    <span>安全装置（サーキットブレーキ）:</span>
-                                    <span id="watcher-circuit-status" class="status-badge normal">正常稼働中</span>
-                                </div>
-                            </div>
-                            <button class="btn btn-secondary btn-reset-watcher" id="btn-reset-watcher" onclick="resetWatcherStatus()" style="width: 100%; margin-top: 12px; font-size: 12px; display: none;">
-                                🔧 安全装置の解除 (強制復旧)
-                            </button>
-                        </section>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- タブ2: AIからの提案 -->
+            <!-- タブ1: AIからの提案 -->
             <div class="tab-content" id="proposals-tab" style="display: none;">
                 <div class="dashboard-grid">
                     <!-- 左側カラム: 提案一覧 -->
@@ -310,6 +185,419 @@
                                         🗑️ 却下する
                                     </button>
                                 </div>
+                            </div>
+                        </section>
+                    </div>
+                </div>
+            </div>
+
+            <!-- タブ2: スケジュール -->
+            <div class="tab-content" id="scheduler-tab" style="display: none;">
+                <div class="dashboard-grid">
+                    <!-- 左カラム: 安全装置 ＆ ロック状況 -->
+                    <div class="left-column">
+                        <section class="card glass">
+                            <h2 class="card-title">☁️ クラウド定期監視ステータス</h2>
+                            <div class="watcher-status-box">
+                                <div class="watcher-status-item">
+                                    <span>多重起動ロック:</span>
+                                    <span id="watcher-lock-status" class="status-badge normal">未ロック</span>
+                                </div>
+                                <div class="watcher-status-item">
+                                    <span>連続エラー数:</span>
+                                    <span id="watcher-error-count">0 / 3</span>
+                                </div>
+                                <div class="watcher-status-item">
+                                    <span>安全装置（サーキットブレーキ）:</span>
+                                    <span id="watcher-circuit-status" class="status-badge normal">正常稼働中</span>
+                                </div>
+                            </div>
+                            <button class="btn btn-secondary btn-reset-watcher" id="btn-reset-watcher" onclick="resetWatcherStatus()" style="width: 100%; margin-top: 12px; font-size: 12px; display: none;">
+                                🔧 安全装置の解除 (強制復旧)
+                            </button>
+                        </section>
+                    </div>
+
+                    <!-- 右カラム: 動的スケジュールテーブル -->
+                    <div class="right-column" style="display: flex; flex-direction: column;">
+                        <section class="card glass" style="flex-grow: 1;">
+                            <h2 class="card-title">⏱️ 定期タスクスケジュール管理表</h2>
+                            <p style="font-size: 11px; color: var(--text-muted); margin-bottom: 12px;">
+                                GitHub Actions（クラウドスケジュール）で定義されている定期自律タスクの実設定です。UTCから日本時間に自動補正されています。
+                            </p>
+                            <div style="overflow-x: auto; background: rgba(0,0,0,0.15); border-radius: 10px; border: 1px solid var(--card-border);">
+                                <table id="schedule-table" style="width: 100%; border-collapse: collapse; text-align: left; font-family: var(--font-inter); font-size: 12px; color: var(--text-main);">
+                                    <thead>
+                                        <tr style="border-bottom: 1px solid var(--card-border); background-color: rgba(255,255,255,0.03);">
+                                            <th style="padding: 14px 10px; font-weight: 600; color: #00f0ff;">タスク名</th>
+                                            <th style="padding: 14px 10px; font-weight: 600; color: #9d00ff; width: 35%;">実行スケジュール (日本時間)</th>
+                                            <th style="padding: 14px 10px; font-weight: 600; color: var(--text-muted);">実行ファイル</th>
+                                            <th style="padding: 14px 10px; font-weight: 600; color: var(--text-muted);">担当エージェント</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="schedule-table-body">
+                                        <tr>
+                                            <td colspan="4" style="padding: 20px; text-align: center; color: var(--text-muted);">YAML定義ファイルをスキャン中...</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </section>
+                    </div>
+                </div>
+            </div>
+
+            <!-- タブ3: クイック実行 (Workflows) -->
+            <div class="tab-content" id="workflows-tab" style="display: none;">
+                <div class="dashboard-grid">
+                    <!-- 左カラム: ワークフロー操作パネル ＆ Inbox監視 -->
+                    <div class="left-column">
+                        <section class="card glass">
+                            <h2 class="card-title">自動ワークフローの実行</h2>
+                            <div class="workflow-section">
+                                <button class="btn btn-primary btn-auto-detect" id="btn-auto" onclick="selectWorkflowMode('auto')" style="width:100%; margin-bottom:16px; font-size:16px; padding:16px;">
+                                    🚀 Inboxのファイルを自動判定して実行
+                                </button>
+                                <p style="font-size: 11px; color: var(--text-muted); margin-bottom: 8px; font-weight: 600;">手動でモードを指定して実行する場合：</p>
+                                <div class="workflow-buttons" id="mode-btn-container">
+                                    <button class="btn btn-secondary" id="btn-blog" onclick="selectWorkflowMode('blog')">ブログ記事モード</button>
+                                    <button class="btn btn-secondary" id="btn-dev" onclick="selectWorkflowMode('dev')">開発コード生成</button>
+                                    <button class="btn btn-secondary" id="btn-bugfix" onclick="selectWorkflowMode('bugfix')">バグ修正モード</button>
+                                    <button class="btn btn-secondary" id="btn-research" onclick="selectWorkflowMode('research')">市場調査モード</button>
+                                    <button class="btn btn-secondary" id="btn-ui_update" onclick="selectWorkflowMode('ui_update')">UIデザイン更新</button>
+                                    <button class="btn btn-secondary" id="btn-newsletter" onclick="selectWorkflowMode('newsletter')">朝のニュースレター</button>
+                                    <button class="btn btn-secondary" id="btn-design_audit" onclick="selectWorkflowMode('design_audit')">UIデザイン定期監査 (アイデアD)</button>
+                                </div>
+                                <div class="workflow-description-box" id="workflow-desc">
+                                    上のボタンを選択すると、ここにモードの説明が表示されます。内容を確認し、下の「実行する」ボタンで開始します。
+                                </div>
+                            </div>
+                            <div class="input-group">
+                                <input type="text" id="workflow-input" placeholder="追加の指示やキーワードをここに入力（任意）...">
+                                <button class="btn btn-execute" onclick="triggerConfirmModal()">実行する</button>
+                            </div>
+                        </section>
+                        
+                        <section class="card glass">
+                            <h2 class="card-title">インプット（新規ファイル）の監視</h2>
+                            <ul class="file-list" id="inbox-list">
+                                <li class="file-item loading">Inbox フォルダをスキャン中...</li>
+                            </ul>
+                        </section>
+                    </div>
+
+                    <!-- 右カラム: 稼働状況 ＆ リアルタイムプレビュー -->
+                    <div class="right-column">
+                        <section class="card glass">
+                            <h2 class="card-title">各部門（エージェント）の稼働状況</h2>
+                            <div class="agent-status-container">
+                                <div class="agent-row" id="agent-ops">
+                                    <span class="agent-name">運営部門 (Operations)</span>
+                                    <div class="progress-bar-bg"><div class="progress-bar" style="width: 0%"></div></div>
+                                    <span class="agent-label">待機中</span>
+                                </div>
+                                <div class="agent-row" id="agent-research">
+                                    <span class="agent-name">リサーチ部門 (Research)</span>
+                                    <div class="progress-bar-bg"><div class="progress-bar" style="width: 0%"></div></div>
+                                    <span class="agent-label">待機中</span>
+                                </div>
+                                <div class="agent-row" id="agent-creative">
+                                    <span class="agent-name">制作・開発部門 (Creative)</span>
+                                    <div class="progress-bar-bg"><div class="progress-bar" style="width: 0%"></div></div>
+                                    <span class="agent-label">待機中</span>
+                                </div>
+                                <div class="agent-row" id="agent-design">
+                                    <span class="agent-name">デザイン監査部門 (UIUX Design)</span>
+                                    <div class="progress-bar-bg"><div class="progress-bar" style="width: 0%"></div></div>
+                                    <span class="agent-label">待機中</span>
+                                </div>
+                                <div class="agent-row" id="agent-qa">
+                                    <span class="agent-name">品質保証・テスト部門 (QA Engineering)</span>
+                                    <div class="progress-bar-bg"><div class="progress-bar" style="width: 0%"></div></div>
+                                    <span class="agent-label">待機中</span>
+                                </div>
+                            </div>
+                        </section>
+                        <section class="card glass preview-card">
+                            <h2 class="card-title">成果物のリアルタイムプレビュー</h2>
+                            <div class="preview-area" id="preview-content">
+                                <p class="preview-placeholder">ワークフローが実行されると、ここに成果物の詳細プレビューが表示されます。</p>
+                            </div>
+                        </section>
+
+                        <!-- 5. クラウド監視ステータス -->
+                        <section class="card glass">
+                            <h2 class="card-title">☁️ クラウド定期監視ステータス</h2>
+                            <div class="watcher-status-box">
+                                <div class="watcher-status-item">
+                                    <span>多重起動ロック:</span>
+                                    <span id="watcher-lock-status" class="status-badge normal">未ロック</span>
+                                </div>
+                                <div class="watcher-status-item">
+                                    <span>連続エラー数:</span>
+                                    <span id="watcher-error-count">0 / 3</span>
+                                </div>
+                                <div class="watcher-status-item">
+                                    <span>安全装置（サーキットブレーキ）:</span>
+                                    <span id="watcher-circuit-status" class="status-badge normal">正常稼働中</span>
+                                </div>
+                            </div>
+                            <button class="btn btn-secondary btn-reset-watcher" id="btn-reset-watcher" onclick="resetWatcherStatus()" style="width: 100%; margin-top: 12px; font-size: 12px; display: none;">
+                                🔧 安全装置の解除 (強制復旧)
+                            </button>
+                        </section>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- タブ1: AIからの提案 -->
+            <div class="tab-content" id="proposals-tab" style="display: none;">
+                <div class="dashboard-grid">
+                    <!-- 左側カラム: 提案一覧 -->
+                    <div class="left-column">
+                        <section class="card glass" style="height: 100%; display: flex; flex-direction: column;">
+                            <h2 class="card-title">💡 提案書一覧</h2>
+                            <p style="font-size: 11px; color: var(--text-muted); margin-bottom: 12px;">
+                                AIが毎週月曜に自発的にリサーチし、投函した提案書です。クリックして詳細を確認できます。
+                            </p>
+                            <ul class="file-list" id="proposal-list-items" style="flex-grow: 1; max-height: none;">
+                                <li class="file-item loading">提案書をロード中...</li>
+                            </ul>
+                        </section>
+                        
+                        <!-- ドラッグ＆ドロップゾーン -->
+                        <section class="card glass dropzone" id="proposal-dropzone" style="margin-top: 16px; min-height: 120px; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 2px dashed rgba(157, 0, 255, 0.3); transition: all 0.3s ease;">
+                            <div style="font-size: 28px; margin-bottom: 8px;">📥</div>
+                            <div style="font-size: 13px; font-weight: 600; color: var(--text-muted); text-align: center;" id="dropzone-text">
+                                ここに提案ファイルをドラッグ＆ドロップして<br><span style="color:#00f0ff;">コメント付きで採用 (Inbox投入)</span>
+                            </div>
+                        </section>
+                    </div>
+                    
+                    <!-- 右側カラム: 提案書の詳細プレビュー -->
+                    <div class="right-column" style="display: flex; flex-direction: column;">
+                        <section class="card glass preview-card" style="height: 100%; display: flex; flex-direction: column;">
+                            <h2 class="card-title" id="proposal-detail-title">提案書のプレビュー</h2>
+                            <div class="preview-area" id="proposal-detail-content" style="flex-grow: 1; max-height: 480px;">
+                                <p class="preview-placeholder">左側の提案一覧から確認したい提案を選択してください。</p>
+                            </div>
+                            <!-- 採用アクションエリア -->
+                            <div id="proposal-action-area" style="margin-top: 16px; display: none;">
+                                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; width: 100%;">
+                                    <button class="btn btn-primary" id="btn-adopt-proposal" style="background: linear-gradient(135deg, #00f0ff 0%, #9d00ff 100%); color:#ffffff; font-size:13px; font-weight:700; padding: 14px 8px;">
+                                        📥 採用 (実行要求)
+                                    </button>
+                                    <button class="btn btn-warning" id="btn-rethink-proposal" style="background: #f59e0b; color:#0a0f1d; font-size:13px; font-weight:700; padding: 14px 8px; border-color: #f59e0b;">
+                                        🔄 再考を依頼する
+                                    </button>
+                                    <button class="btn btn-secondary" id="btn-hold-proposal" style="font-size:13px; font-weight:700; padding: 14px 8px;">
+                                        ⏸️ 保留にする
+                                    </button>
+                                    <button class="btn btn-danger" id="btn-reject-proposal" style="background: #ef4444; color:#ffffff; font-size:13px; font-weight:700; padding: 14px 8px; border-color: #ef4444;">
+                                        🗑️ 却下する
+                                    </button>
+                                </div>
+                            </div>
+                        </section>
+                    </div>
+                </div>
+            </div>
+
+            <!-- タブ2: スケジュール -->
+            <div class="tab-content" id="scheduler-tab" style="display: none;">
+                <div class="dashboard-grid">
+                    <!-- 左カラム: 安全装置 ＆ ロック状況 -->
+                    <div class="left-column">
+                        <section class="card glass">
+                            <h2 class="card-title">☁️ クラウド定期監視ステータス</h2>
+                            <div class="watcher-status-box">
+                                <div class="watcher-status-item">
+                                    <span>多重起動ロック:</span>
+                                    <span id="watcher-lock-status" class="status-badge normal">未ロック</span>
+                                </div>
+                                <div class="watcher-status-item">
+                                    <span>連続エラー数:</span>
+                                    <span id="watcher-error-count">0 / 3</span>
+                                </div>
+                                <div class="watcher-status-item">
+                                    <span>安全装置（サーキットブレーキ）:</span>
+                                    <span id="watcher-circuit-status" class="status-badge normal">正常稼働中</span>
+                                </div>
+                            </div>
+                            <button class="btn btn-secondary btn-reset-watcher" id="btn-reset-watcher" onclick="resetWatcherStatus()" style="width: 100%; margin-top: 12px; font-size: 12px; display: none;">
+                                🔧 安全装置の解除 (強制復旧)
+                            </button>
+                        </section>
+                    </div>
+
+                    <!-- 右カラム: 動的スケジュールテーブル -->
+                    <div class="right-column" style="display: flex; flex-direction: column;">
+                        <section class="card glass" style="flex-grow: 1;">
+                            <h2 class="card-title">⏱️ 定期タスクスケジュール管理表</h2>
+                            <p style="font-size: 11px; color: var(--text-muted); margin-bottom: 12px;">
+                                GitHub Actions（クラウドスケジュール）で定義されている定期自律タスクの実設定です。UTCから日本時間に自動補正されています。
+                            </p>
+                            <div style="overflow-x: auto; background: rgba(0,0,0,0.15); border-radius: 10px; border: 1px solid var(--card-border);">
+                                <table id="schedule-table" style="width: 100%; border-collapse: collapse; text-align: left; font-family: var(--font-inter); font-size: 12px; color: var(--text-main);">
+                                    <thead>
+                                        <tr style="border-bottom: 1px solid var(--card-border); background-color: rgba(255,255,255,0.03);">
+                                            <th style="padding: 14px 10px; font-weight: 600; color: #00f0ff;">タスク名</th>
+                                            <th style="padding: 14px 10px; font-weight: 600; color: #9d00ff; width: 35%;">実行スケジュール (日本時間)</th>
+                                            <th style="padding: 14px 10px; font-weight: 600; color: var(--text-muted);">実行ファイル</th>
+                                            <th style="padding: 14px 10px; font-weight: 600; color: var(--text-muted);">担当エージェント</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="schedule-table-body">
+                                        <tr>
+                                            <td colspan="4" style="padding: 20px; text-align: center; color: var(--text-muted);">YAML定義ファイルをスキャン中...</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </section>
+                    </div>
+                </div>
+            </div>
+
+            <!-- タブ3: クイック実行 (Workflows) -->
+            <div class="tab-content" id="workflows-tab" style="display: none;">
+                <div class="dashboard-grid">
+                    <!-- 左カラム: ワークフロー操作パネル ＆ Inbox監視 -->
+                    <div class="left-column">
+                        <section class="card glass">
+                            <h2 class="card-title">自動ワークフローの実行</h2>
+                            <div class="workflow-section">
+                                <button class="btn btn-primary btn-auto-detect" id="btn-auto" onclick="selectWorkflowMode('auto')" style="width:100%; margin-bottom:16px; font-size:16px; padding:16px;">
+                                    🚀 Inboxのファイルを自動判定して実行
+                                </button>
+                                <p style="font-size: 11px; color: var(--text-muted); margin-bottom: 8px; font-weight: 600;">手動でモードを指定して実行する場合：</p>
+                                <div class="workflow-buttons" id="mode-btn-container">
+                                    <button class="btn btn-secondary" id="btn-blog" onclick="selectWorkflowMode('blog')">ブログ記事モード</button>
+                                    <button class="btn btn-secondary" id="btn-dev" onclick="selectWorkflowMode('dev')">開発コード生成</button>
+                                    <button class="btn btn-secondary" id="btn-bugfix" onclick="selectWorkflowMode('bugfix')">バグ修正モード</button>
+                                    <button class="btn btn-secondary" id="btn-research" onclick="selectWorkflowMode('research')">市場調査モード</button>
+                                    <button class="btn btn-secondary" id="btn-ui_update" onclick="selectWorkflowMode('ui_update')">UIデザイン更新</button>
+                                    <button class="btn btn-secondary" id="btn-newsletter" onclick="selectWorkflowMode('newsletter')">朝のニュースレター</button>
+                                    <button class="btn btn-secondary" id="btn-design_audit" onclick="selectWorkflowMode('design_audit')">UIデザイン定期監査 (アイデアD)</button>
+                                </div>
+                                <div class="workflow-description-box" id="workflow-desc">
+                                    上のボタンを選択すると、ここにモードの説明が表示されます。内容を確認し、下の「実行する」ボタンで開始します。
+                                </div>
+                            </div>
+                            <div class="input-group">
+                                <input type="text" id="workflow-input" placeholder="追加の指示やキーワードをここに入力（任意）...">
+                                <button class="btn btn-execute" onclick="triggerConfirmModal()">実行する</button>
+                            </div>
+                        </section>
+                        
+                        <section class="card glass">
+                            <h2 class="card-title">インプット（新規ファイル）の監視</h2>
+                            <ul class="file-list" id="inbox-list">
+                                <li class="file-item loading">Inbox フォルダをスキャン中...</li>
+                            </ul>
+                        </section>
+                    </div>
+
+                    <!-- 右カラム: 稼働状況 ＆ リアルタイムプレビュー -->
+                    <div class="right-column">
+                        <section class="card glass">
+                            <h2 class="card-title">各部門（エージェント）の稼働状況</h2>
+                            <div class="agent-status-container">
+                                <div class="agent-row" id="agent-ops">
+                                    <span class="agent-name">運営部門 (Operations)</span>
+                                    <div class="progress-bar-bg"><div class="progress-bar" style="width: 0%"></div></div>
+                                    <span class="agent-label">待機中</span>
+                                </div>
+                                <div class="agent-row" id="agent-research">
+                                    <span class="agent-name">リサーチ部門 (Research)</span>
+                                    <div class="progress-bar-bg"><div class="progress-bar" style="width: 0%"></div></div>
+                                    <span class="agent-label">待機中</span>
+                                </div>
+                                <div class="agent-row" id="agent-creative">
+                                    <span class="agent-name">制作・開発部門 (Creative)</span>
+                                    <div class="progress-bar-bg"><div class="progress-bar" style="width: 0%"></div></div>
+                                    <span class="agent-label">待機中</span>
+                                </div>
+                                <div class="agent-row" id="agent-design">
+                                    <span class="agent-name">デザイン監査部門 (UIUX Design)</span>
+                                    <div class="progress-bar-bg"><div class="progress-bar" style="width: 0%"></div></div>
+                                    <span class="agent-label">待機中</span>
+                                </div>
+                                <div class="agent-row" id="agent-qa">
+                                    <span class="agent-name">品質保証・テスト部門 (QA Engineering)</span>
+                                    <div class="progress-bar-bg"><div class="progress-bar" style="width: 0%"></div></div>
+                                    <span class="agent-label">待機中</span>
+                                </div>
+                            </div>
+                        </section>
+                        <section class="card glass preview-card">
+                            <h2 class="card-title">成果物のリアルタイムプレビュー</h2>
+                            <div class="preview-area" id="preview-content">
+                                <p class="preview-placeholder">ワークフローが実行されると、ここに成果物の詳細プレビューが表示されます。</p>
+                            </div>
+                        </section>
+                    </div>
+                </div>
+            </div>
+
+            <!-- タブ4: 自己進化 (Evolution) -->
+            <div class="tab-content" id="evolution-tab" style="display: none;">
+                <div class="dashboard-grid">
+                    <!-- 左カラム: 自然言語要件入力フォーム -->
+                    <div class="left-column">
+                        <section class="card glass">
+                            <h2 class="card-title">🛠️ 新規ワークフローの自動開発 (自己進化)</h2>
+                            <p style="font-size: 11px; color: var(--text-muted); margin-bottom: 12px;">
+                                作りたい自動化処理を自然言語で指示すると、AIエージェント達（Creative, Design, QA, Auditor）が自動で起案・多段監査・修正を行い、ダッシュボードへ登録して自動デプロイします。
+                            </p>
+                            <div style="margin-bottom: 16px;">
+                                <textarea id="meta-workflow-requirement" placeholder="例:『毎週金曜の朝10時に、自社のGitHubリポジトリのスター数を集計し、Outputs/github_report.md に書き出すワークフローを作ってください』" style="width: 100%; height: 120px; background-color: rgba(0,0,0,0.2); border: 1px solid var(--card-border); border-radius: 10px; padding: 12px; color: var(--text-main); font-family: var(--font-inter); font-size: 13px; resize: none;"></textarea>
+                            </div>
+                            <button class="btn btn-primary" onclick="triggerMetaWorkflowCreation()" style="width: 100%; font-weight:700; background: linear-gradient(135deg, #9d00ff 0%, #00f0ff 100%); color:#ffffff; padding: 14px;">
+                                🛠️ 開発・多段監査・デプロイを実行する
+                            </button>
+                        </section>
+                    </div>
+
+                    <!-- 右カラム: 自律開発進行シミュレータ ＆ 完了ログ -->
+                    <div class="right-column" style="display: flex; flex-direction: column;">
+                        <!-- 開発進行 -->
+                        <section class="card glass">
+                            <h2 class="card-title">開発・監査プロセス稼働状況</h2>
+                            <div class="agent-status-container">
+                                <div class="agent-row" id="agent-ops-evo">
+                                    <span class="agent-name">運営部門 (Operations)</span>
+                                    <div class="progress-bar-bg"><div class="progress-bar" style="width: 0%"></div></div>
+                                    <span class="agent-label">待機中</span>
+                                </div>
+                                <div class="agent-row" id="agent-creative-evo">
+                                    <span class="agent-name">制作・開発部門 (Creative)</span>
+                                    <div class="progress-bar-bg"><div class="progress-bar" style="width: 0%"></div></div>
+                                    <span class="agent-label">待機中</span>
+                                </div>
+                                <div class="agent-row" id="agent-design-evo">
+                                    <span class="agent-name">デザイン監査部門 (UIUX Design)</span>
+                                    <div class="progress-bar-bg"><div class="progress-bar" style="width: 0%"></div></div>
+                                    <span class="agent-label">待機中</span>
+                                </div>
+                                <div class="agent-row" id="agent-qa-evo">
+                                    <span class="agent-name">品質保証・テスト部門 (QA Engineering)</span>
+                                    <div class="progress-bar-bg"><div class="progress-bar" style="width: 0%"></div></div>
+                                    <span class="agent-label">待機中</span>
+                                </div>
+                                <div class="agent-row" id="agent-auditor-evo">
+                                    <span class="agent-name">法務・広報監査 (Auditor)</span>
+                                    <div class="progress-bar-bg"><div class="progress-bar" style="width: 0%"></div></div>
+                                    <span class="agent-label">待機中</span>
+                                </div>
+                            </div>
+                        </section>
+
+                        <!-- 完了ログ -->
+                        <section class="card glass preview-card" style="flex-grow: 1;">
+                            <h2 class="card-title">成果物 ＆ 監査結果ログ</h2>
+                            <div class="preview-area" id="preview-content-evo">
+                                <p class="preview-placeholder">自動開発プロセスが開始されると、ここに詳細な進捗ログや成果物が表示されます。</p>
                             </div>
                         </section>
                     </div>

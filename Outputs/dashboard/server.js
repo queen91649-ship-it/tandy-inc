@@ -16,6 +16,59 @@ const MIME_TYPES = {
     '.gif': 'image/gif'
 };
 
+// cron 表現を日本時間 (JST) の日本語テキストに変換する簡易パーサー
+function parseCronToJST(cronStr) {
+    const parts = cronStr.split(/\s+/);
+    if (parts.length < 5) return cronStr;
+
+    const minute = parts[0];
+    const hour = parts[1];
+    const dayOfMonth = parts[2];
+    const month = parts[3];
+    const dayOfWeek = parts[4];
+
+    const DAYS_JP = {
+        '0': '日曜', '7': '日曜', '1': '月曜', '2': '火曜',
+        '3': '水曜', '4': '木曜', '5': '金曜', '6': '土曜',
+        'SUN': '日曜', 'MON': '月曜', 'TUE': '火曜', 'WED': '水曜',
+        'THU': '木曜', 'FRI': '金曜', 'SAT': '土曜'
+    };
+
+    // 曜日のパース
+    let dayLabel = '毎日';
+    if (dayOfWeek !== '*') {
+        if (dayOfWeek.includes(',')) {
+            dayLabel = '毎週' + dayOfWeek.split(',').map(d => DAYS_JP[d] || d).join('・');
+        } else {
+            dayLabel = '毎週' + (DAYS_JP[dayOfWeek] || dayOfWeek);
+        }
+    }
+
+    // 時間のパース (UTC -> JST +9時間)
+    let timeLabel = '';
+    const convertHour = (h) => {
+        const utcHour = parseInt(h, 10);
+        if (isNaN(utcHour)) return h;
+        let jstHour = utcHour + 9;
+        let dayOffset = 0;
+        if (jstHour >= 24) {
+            jstHour -= 24;
+            dayOffset = 1; // 翌日になるが曜日パースは簡易版のため時間のみ補正
+        }
+        return `${String(jstHour).padStart(2, '0')}:00`;
+    };
+
+    if (hour === '*') {
+        timeLabel = '毎時';
+    } else if (hour.includes(',')) {
+        timeLabel = hour.split(',').map(h => convertHour(h)).join(' / ');
+    } else {
+        timeLabel = convertHour(hour);
+    }
+
+    return `${dayLabel} ${timeLabel}`;
+}
+
 const server = http.createServer((req, res) => {
     // API 1: Inbox内の新規ファイルをリアルタイム実スキャンして返す
     if (req.url === '/api/inbox' && req.method === 'GET') {
@@ -140,7 +193,6 @@ const server = http.createServer((req, res) => {
             // もし対象がディレクトリの場合、その中の最初の主要ファイルを読み込む
             if (fs.statSync(pendingPath).isDirectory()) {
                 const subfiles = fs.readdirSync(pendingPath);
-                // マークダウンまたはテキストファイルを優先して探す
                 const readableFile = subfiles.find(f => f.endsWith('.md') || f.endsWith('.txt') || f.endsWith('.html') || f.endsWith('.json'));
                 if (readableFile) {
                     contentPath = path.join(pendingPath, readableFile);
@@ -225,6 +277,66 @@ const server = http.createServer((req, res) => {
                 res.end(JSON.stringify({ status: 'error', message: 'Internal Server Error' }));
             }
         });
+        return;
+    }
+
+    // API 2.3: 定期タスクスケジュールの自動スキャン ＆ JST変換
+    if (req.url === '/api/schedules' && req.method === 'GET') {
+        const workflowsPath = path.join(WORKSPACE_ROOT, '.github', 'workflows');
+        const schedules = [];
+        
+        if (fs.existsSync(workflowsPath)) {
+            const files = fs.readdirSync(workflowsPath);
+            files.forEach(file => {
+                if (file.endsWith('.yml') || file.endsWith('.yaml')) {
+                    try {
+                        const content = fs.readFileSync(path.join(workflowsPath, file), 'utf8');
+                        
+                        // 1. ワークフロー名の抽出
+                        const nameMatch = content.match(/^name:\s*(.+)$/m);
+                        const name = nameMatch ? nameMatch[1].trim() : file;
+                        
+                        // 2. cron定義の抽出
+                        const cronMatch = content.match(/-\s*cron:\s*['"]?([^'"]+)['"]?/);
+                        if (cronMatch) {
+                            const cron = cronMatch[1].trim();
+                            const jstSchedule = parseCronToJST(cron);
+                            
+                            // 3. 実行プログラムの抽出
+                            const scriptMatch = content.match(/python\s+[\w/]*?(tandy_\w+\.py)/);
+                            const script = scriptMatch ? scriptMatch[1] : '不明 (bashスクリプトなど)';
+                            
+                            // 4. 担当エージェントの判定
+                            let department = '制作・開発部門';
+                            if (file.includes('watcher') || file.includes('housekeeping')) {
+                                department = '運営・総務部門';
+                            } else if (file.includes('proposal')) {
+                                department = '経営・統括部門 (審査会)';
+                            } else if (file.includes('newsletter')) {
+                                department = '出版事業部';
+                            }
+                            
+                            schedules.push({
+                                file: file,
+                                name: name,
+                                cron: cron,
+                                scheduleJST: jstSchedule,
+                                script: script,
+                                department: department
+                            });
+                        }
+                    } catch (e) {
+                        console.error(`Error reading workflow file: ${file}`, e);
+                    }
+                }
+            });
+        }
+        
+        res.writeHead(200, {
+            'Content-Type': 'application/json; charset=utf-8',
+            'Access-Control-Allow-Origin': '*'
+        });
+        res.end(JSON.stringify(schedules));
         return;
     }
 
@@ -398,7 +510,7 @@ const server = http.createServer((req, res) => {
                         fileContent += `\n\n## ${headerStr}\n- アクション日時: ${todayStr} (日本時間)\n- 内容:\n  ${comment.replace(/\n/g, '\n  ')}\n`;
                     }
                     
-                    // ファイル名の整形 (Inboxへの投函用: 【AI提案】YYYYMMDD_部門名_テーマ.md -> 【実行要求】YYYYMMDD_部門名_テーマ.md)
+                    // ファイル名の整形 (Inboxへの投函用)
                     const prefix = action === 'adopt' ? '【実行要求】' : '【再考依頼】';
                     let targetName = fileName.replace('【AI提案】', prefix);
                     if (!targetName.startsWith(prefix)) {
