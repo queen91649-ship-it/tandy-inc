@@ -87,7 +87,6 @@ class TandyDriveClient:
         前回の 'latest_newsletter' を日付付きで複製コピーしてアーカイブ保存し、
         元の 'latest_newsletter' の内容を Google Docs API で上書き更新＆フォーマット整形する。
         """
-        # 1. 既存の latest_newsletter を検索
         query = f"'{folder_id}' in parents and name contains 'latest_newsletter' and trashed = false"
         results = self.service.files().list(q=query, fields='files(id, name)').execute()
         files = results.get('files', [])
@@ -97,7 +96,7 @@ class TandyDriveClient:
 
         latest_id = files[0]['id']
         
-        # 2. 前日の内容を日付付きファイル名でコピー（アーカイブ - 日本時間基準）
+        # 前日の内容を日付付きファイル名でコピー（アーカイブ - 日本時間基準）
         jst = datetime.timezone(datetime.timedelta(hours=9))
         archive_name = f"{datetime.datetime.now(jst).strftime('%Y%m%d')}_newsletter"
         print(f"前日のニュースレターをコピーアーカイブ中: {archive_name}")
@@ -106,7 +105,7 @@ class TandyDriveClient:
             body={'name': archive_name}
         ).execute()
 
-        # 3. Google Docs API を用いた本番上書き ＆ 自己肯定感が上がる美麗フォーマットの適用
+        # Google Docs API を用いた本番上書き ＆ 自己肯定感が上がる美麗フォーマットの適用
         print("最新ニュースレターを上書き更新 ＆ 知的フォーマット整形中...")
         self.write_and_format_google_doc(latest_id, content)
         return latest_id
@@ -115,7 +114,6 @@ class TandyDriveClient:
         """
         Google Docs API を使用して、Markdownテキストを美しい段落・見出し・装飾付きドキュメントに変換して上書きする。
         """
-        # 3-A. ドキュメントの全コンテンツをクリアする
         doc = self.docs_service.documents().get(documentId=document_id).execute()
         end_index = doc.get('body').get('content')[-1].get('endIndex')
         
@@ -131,12 +129,10 @@ class TandyDriveClient:
             })
             self.docs_service.documents().batchUpdate(documentId=document_id, body={'requests': requests}).execute()
 
-        # 3-B. テキストをパースし、挿入リクエストを作成する
         requests = []
         current_index = 1
         lines = markdown_text.split('\n')
         
-        # フォーマット適用予定の範囲情報を格納するリスト
         formatting_actions = []
 
         for line in lines:
@@ -176,11 +172,9 @@ class TandyDriveClient:
 
                 current_index += len(clean_text)
 
-        # 3-C. テキストの挿入を実行
         if requests:
             self.docs_service.documents().batchUpdate(documentId=document_id, body={'requests': requests}).execute()
 
-        # 3-D. 書式適用リクエストを作成
         style_requests = []
         for action, start, end in formatting_actions:
             if start < 1:
@@ -273,14 +267,12 @@ class TandyDriveClient:
                     }
                 })
 
-        # 3-E. 書式の適用を実行
         if style_requests:
             try:
                 self.docs_service.documents().batchUpdate(documentId=document_id, body={'requests': style_requests}).execute()
             except Exception as ex:
                 print(f"書式適用で一部スキップが発生しました: {ex}")
 
-        # 3-F. マークダウンの不要な「**」記号を消去
         replace_requests = [
             {
                 'replaceAllText': {
@@ -290,6 +282,65 @@ class TandyDriveClient:
             }
         ]
         self.docs_service.documents().batchUpdate(documentId=document_id, body={'requests': replace_requests}).execute()
+
+    def empty_trash_and_show_quota(self):
+        """
+        サービスアカウントのストレージ容量（クォータ）を表示し、
+        ゴミ箱（Trash）を空にして容量を解放する。
+        """
+        print("\n--- サービスアカウント ストレージ確認 ＆ ゴミ箱クリア ---")
+        try:
+            about = self.service.about().get(fields="storageQuota").execute()
+            quota = about.get('storageQuota', {})
+            limit = int(quota.get('limit', 0)) / (1024**3) if 'limit' in quota else 0
+            usage = int(quota.get('usage', 0)) / (1024**3) if 'usage' in quota else 0
+            print(f"ストレージ使用状況: {usage:.4f} GB / 上限: {limit:.4f} GB")
+        except Exception as e:
+            print(f"ストレージ情報の取得に失敗しました: {e}")
+
+        try:
+            print("ゴミ箱を空にしています...")
+            self.service.files().emptyTrash().execute()
+            print("ゴミ箱のクリアが完了しました。")
+            
+            about = self.service.about().get(fields="storageQuota").execute()
+            quota = about.get('storageQuota', {})
+            usage = int(quota.get('usage', 0)) / (1024**3) if 'usage' in quota else 0
+            print(f"クリア後のストレージ使用状況: {usage:.4f} GB")
+        except Exception as e:
+            print(f"ゴミ箱のクリアに失敗しました: {e}")
+
+    def cleanup_old_archives(self, folder_id, keep_days=30):
+        """
+        アーカイブフォルダ内の古いファイルを削除する（デフォルト30日間保持）
+        """
+        print(f"\n--- 古いアーカイブのクリーンアップ (過去 {keep_days} 日分を保持) ---")
+        try:
+            query = f"'{folder_id}' in parents and name contains '_newsletter' and trashed = false"
+            results = self.service.files().list(
+                q=query, 
+                orderBy="name desc", 
+                fields='files(id, name, createdTime)'
+            ).execute()
+            files = results.get('files', [])
+            
+            archive_files = []
+            for f in files:
+                if re.match(r'^\d{8}_newsletter', f['name']):
+                    archive_files.append(f)
+            
+            print(f"見つかったアーカイブ数: {len(archive_files)} 件")
+            if len(archive_files) > keep_days:
+                to_delete = archive_files[keep_days:]
+                print(f"保持上限 ({keep_days} 件) を超えたため、{len(to_delete)} 件の古いファイルを削除します。")
+                for f in to_delete:
+                    print(f"削除中: {f['name']} (ID: {f['id']})")
+                    self.service.files().delete(fileId=f['id']).execute()
+                print("古いアーカイブの削除が完了しました。")
+            else:
+                print("削除対象の古いアーカイブはありません。")
+        except Exception as e:
+            print(f"古いアーカイブのクリーンアップに失敗しました: {e}")
 
 
 def clean_emoji_and_symbols(text):
@@ -391,7 +442,7 @@ def main():
         f"【AI・テクノロジー】{articles.get('ai','')}\n"
         f"【通信インフラ】{articles.get('infra','')}\n"
         f"【トッテナム・Spurs】{articles.get('spurs','')}\n"
-        f"【プレミアリーグ】{articles.get('premier','')}\n"
+        f"{articles.get('premier','')}\n"
         f"【欧州リーグ】{articles.get('europe','')}\n"
         f"【宇宙・深海・科学】{articles.get('serendipity','')}\n"
         "全体のトーンを統一し、表紙（ヘッドラインリード・目次）と編集長社説を追加して、"
