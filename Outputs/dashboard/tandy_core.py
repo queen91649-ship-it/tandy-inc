@@ -117,7 +117,7 @@ def main():
     today_str = datetime.date.today().strftime("%Y年%m月%d日")
     
     for name, instruction in reporter_instructions.items():
-        prompt = f"本日の日付は {today_str} です。あなたの役割定義に従い、直近24時間における重要トピックを必ず3件以上選定し、詳細に執筆してください。各トピックには、個別に必ず 'Tandy's Insight' を記述してください。最新情報を取得するために、必ず内蔵の検索（Google Search）を実行し、最新のファクトに基づいて執筆してください。"
+        prompt = f"本日の日付は {today_str} です。あなたの役割定義に従い、直近24時間における重要トピックを必ず3件以上選定し、詳細に執筆してください。各トピックには、個別に必ず 'Tandy's Insight' を記述してください。最新情報を取得するために、必ず内蔵 of 検索（Google Search）を実行し、最新のファクトに基づいて執筆してください。"
         try:
             response = gemini_client.models.generate_content(
                 model='gemini-2.5-pro',
@@ -167,11 +167,14 @@ if __name__ == "__main__":
         main()
     except Exception as e:
         tb = traceback.format_exc()
+        print("\n!!! ERROR DETAILS IN CLOUD !!!")
+        print(tb)  # 必ずGitHubの画面にエラーを表示させる
         try:
             drive_client = TandyDriveClient()
             errors_folder_id = drive_client.get_or_create_folder_by_path("Outputs/errors")
             err_filename = f"error_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
             drive_client.upload_new_file(errors_folder_id, err_filename, tb)
+            print("Uploaded error log to Google Drive.")
         except Exception as ex:
-            pass
+            print(f"Could not upload error log to Google Drive: {ex}")
         sys.exit(1)
