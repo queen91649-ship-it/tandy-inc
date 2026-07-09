@@ -121,6 +121,113 @@ const server = http.createServer((req, res) => {
         return;
     }
 
+    // API 2.1: 承認待ち成果物（Pending Approval）の個別ファイルをプレビュー読み込み
+    if (req.url.startsWith('/api/pending/detail') && req.method === 'GET') {
+        const urlObj = new URL(req.url, `http://${req.headers.host}`);
+        const name = urlObj.searchParams.get('name');
+        
+        if (!name || name.includes('..') || path.isAbsolute(name)) {
+            res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
+            res.end('Bad Request');
+            return;
+        }
+        
+        const pendingPath = path.join(WORKSPACE_ROOT, 'Pending_Approval', name);
+        
+        if (fs.existsSync(pendingPath)) {
+            let contentPath = pendingPath;
+            
+            // もし対象がディレクトリの場合、その中の最初の主要ファイルを読み込む
+            if (fs.statSync(pendingPath).isDirectory()) {
+                const subfiles = fs.readdirSync(pendingPath);
+                // マークダウンまたはテキストファイルを優先して探す
+                const readableFile = subfiles.find(f => f.endsWith('.md') || f.endsWith('.txt') || f.endsWith('.html') || f.endsWith('.json'));
+                if (readableFile) {
+                    contentPath = path.join(pendingPath, readableFile);
+                } else if (subfiles.length > 0) {
+                    contentPath = path.join(pendingPath, subfiles[0]);
+                }
+            }
+            
+            if (fs.existsSync(contentPath) && fs.statSync(contentPath).isFile()) {
+                const content = fs.readFileSync(contentPath, 'utf8');
+                res.writeHead(200, {
+                    'Content-Type': 'text/markdown; charset=utf-8',
+                    'Access-Control-Allow-Origin': '*'
+                });
+                res.end(content);
+            } else {
+                res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+                res.end('Readable content not found inside directory');
+            }
+        } else {
+            res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+            res.end('Pending asset not found');
+        }
+        return;
+    }
+
+    // API 2.2: 承認待ち成果物のCEO監査アクション (承認・却下)
+    if (req.url === '/api/pending/action' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => {
+            body += chunk.toString();
+        });
+        
+        req.on('end', () => {
+            try {
+                const data = JSON.parse(body);
+                const name = data.name;
+                const action = data.action; // 'approve' or 'reject'
+                
+                if (!name || name.includes('..') || path.isAbsolute(name) || !action) {
+                    res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
+                    res.end(JSON.stringify({ status: 'error', message: 'Bad Request' }));
+                    return;
+                }
+                
+                const sourcePath = path.join(WORKSPACE_ROOT, 'Pending_Approval', name);
+                
+                if (!fs.existsSync(sourcePath)) {
+                    res.writeHead(404, { 'Content-Type': 'application/json; charset=utf-8' });
+                    res.end(JSON.stringify({ status: 'error', message: 'Asset not found.' }));
+                    return;
+                }
+                
+                const archivePath = path.join(WORKSPACE_ROOT, 'Outputs', 'archive');
+                const rejectedPath = path.join(archivePath, 'rejected_assets');
+                
+                // フォルダの自動作成
+                const ensureDir = (dirPath) => {
+                    if (!fs.existsSync(dirPath)) {
+                        fs.mkdirSync(dirPath, { recursive: true });
+                    }
+                };
+                
+                if (action === 'approve') {
+                    ensureDir(archivePath);
+                    fs.renameSync(sourcePath, path.join(archivePath, name));
+                    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+                    res.end(JSON.stringify({ status: 'success', message: 'Asset approved and moved to Outputs/archive.', action }));
+                } else if (action === 'reject') {
+                    ensureDir(rejectedPath);
+                    fs.renameSync(sourcePath, path.join(rejectedPath, name));
+                    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+                    res.end(JSON.stringify({ status: 'success', message: 'Asset rejected and moved to Outputs/archive/rejected_assets.', action }));
+                } else {
+                    res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
+                    res.end(JSON.stringify({ status: 'error', message: 'Invalid action.' }));
+                }
+                
+            } catch (error) {
+                console.error("Error executing pending asset action: ", error);
+                res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+                res.end(JSON.stringify({ status: 'error', message: 'Internal Server Error' }));
+            }
+        });
+        return;
+    }
+
     // API 2.5: Outputs/proposals 内の提案一覧を取得 (通常+保留中のマージ、部門名抽出のサポート)
     if (req.url === '/api/proposals' && req.method === 'GET') {
         const proposalsPath = path.join(WORKSPACE_ROOT, 'Outputs', 'proposals');
