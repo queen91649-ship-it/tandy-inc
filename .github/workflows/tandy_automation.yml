@@ -65,4 +65,4 @@ jobs:
         find Outputs/newsletters/ -name "*_newsletter.md" -type f -mtime +30 -exec rm {} \;
         
         git add Outputs/newsletters/
-        git diff --quiet && git diff --staged --quiet || (git commit -m "Archive newsletter for $(date +'%Y-%m-%d')" && git push origin main)
+        git diff --quiet && git diff --staged --quiet || (git commit -m "Archive newsletter for $(date +'%Y-%m-%d')" && git pull --rebase origin main && git push origin main)
