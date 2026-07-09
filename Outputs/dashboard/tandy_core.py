@@ -32,8 +32,11 @@ class TandyDriveClient:
         current_parent = parent_id
         for i, part in enumerate(parts):
             is_last = (i == len(parts) - 1)
-            mime_type_query = "and mimeType != 'application/vnd.google-apps.folder'" if is_last else "and mimeType = 'application/vnd.google-apps.folder'"
-            query = f"'{current_parent}' in parents and name = '{part}' and trashed = false {mime_type_query}"
+            if is_last:
+                # ファイルはGoogle Docs含むすべての種類で検索
+                query = f"'{current_parent}' in parents and name = '{part}' and trashed = false"
+            else:
+                query = f"'{current_parent}' in parents and name = '{part}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
             results = self.service.files().list(q=query, fields='files(id, name)').execute()
             files = results.get('files', [])
             if not files:
@@ -42,7 +45,7 @@ class TandyDriveClient:
             current_parent = files[0]['id']
         return current_parent
 
-    def get_or_create_folder_by_path(self, relative_path, parent_id=None):
+    def get_folder_id_by_path(self, relative_path, parent_id=None):
         if parent_id is None:
             parent_id = self.root_id
         parts = relative_path.strip("/").split("/")
@@ -54,15 +57,17 @@ class TandyDriveClient:
             if files:
                 current_parent = files[0]['id']
             else:
-                folder_metadata = {'name': part, 'mimeType': 'application/vnd.google-apps.folder', 'parents': [current_parent]}
-                folder = self.service.files().create(body=folder_metadata, fields='id').execute()
-                current_parent = folder.get('id')
-                print(f"フォルダ作成: {part}")
+                print(f"フォルダが見つかりません: {part}")
+                return None
         return current_parent
 
     def read_file_content(self, file_id):
         import io
-        request = self.service.files().get_media(fileId=file_id)
+        # Google Docsの場合はtextとしてエクスポート
+        try:
+            request = self.service.files().export_media(fileId=file_id, mimeType='text/plain')
+        except Exception:
+            request = self.service.files().get_media(fileId=file_id)
         fh = io.BytesIO()
         downloader = MediaIoBaseDownload(fh, request)
         done = False
@@ -70,15 +75,58 @@ class TandyDriveClient:
             status, done = downloader.next_chunk()
         return fh.getvalue().decode('utf-8')
 
-    def upload_new_file(self, folder_id, filename, content):
-        with open(filename, 'w', encoding='utf-8') as f:
+    def read_file_content_smart(self, file_id, mime_type=None):
+        """Google Docs/通常ファイルを自動判別して読み込む"""
+        import io
+        if mime_type and 'google-apps.document' in mime_type:
+            request = self.service.files().export_media(fileId=file_id, mimeType='text/plain')
+        else:
+            request = self.service.files().get_media(fileId=file_id)
+        fh = io.BytesIO()
+        downloader = MediaIoBaseDownload(fh, request)
+        done = False
+        while not done:
+            status, done = downloader.next_chunk()
+        return fh.getvalue().decode('utf-8')
+
+    def update_existing_file(self, folder_id, content):
+        """
+        フォルダ内の 'latest_newsletter' ファイルを上書き更新する。
+        サービスアカウントは新規ファイル作成不可のため、
+        ユーザーが事前に作成した既存ファイルを更新する方式を採用。
+        """
+        # latest_newsletter という名前のファイルを検索
+        query = f"'{folder_id}' in parents and name contains 'latest_newsletter' and trashed = false"
+        results = self.service.files().list(q=query, fields='files(id, name, mimeType)').execute()
+        files = results.get('files', [])
+
+        if not files:
+            raise FileNotFoundError(
+                "'latest_newsletter' ファイルがnewslettersフォルダ内に見つかりません。"
+                "Googleドライブの Outputs/newsletters フォルダに、"
+                "'latest_newsletter' という名前のGoogleドキュメントを手動で作成してください。"
+            )
+
+        file_id = files[0]['id']
+        file_name = files[0]['name']
+        print(f"更新対象ファイル発見: {file_name} (ID: {file_id})")
+
+        # 一時ファイルに書き出してアップロード
+        temp_filename = "temp_newsletter.md"
+        with open(temp_filename, 'w', encoding='utf-8') as f:
             f.write(content)
-        file_metadata = {'name': filename, 'parents': [folder_id]}
-        media = MediaFileUpload(filename, mimetype='text/markdown')
-        uploaded = self.service.files().create(body=file_metadata, media_body=media, fields='id').execute()
-        if os.path.exists(filename):
-            os.remove(filename)
-        return uploaded.get('id')
+
+        media = MediaFileUpload(temp_filename, mimetype='text/plain')
+        updated = self.service.files().update(
+            fileId=file_id,
+            media_body=media
+        ).execute()
+
+        if os.path.exists(temp_filename):
+            os.remove(temp_filename)
+
+        return updated.get('id')
+
 
 def main():
     if not ROOT_FOLDER_ID or not GEMINI_API_KEY:
@@ -97,16 +145,16 @@ def main():
     watchlist_content = drive.read_file_content(watchlist_id)
     print("watchlist.txt 読み込み完了。")
 
-    # 記者定義ファイル読み込み
+    # 記者・編集長・監査役の定義ファイル読み込み
     reporters = {
-        "japan":      "08_Publishing/reporters/reporter_japan.md",
-        "global":     "08_Publishing/reporters/reporter_global.md",
-        "ai":         "08_Publishing/reporters/reporter_ai.md",
-        "infra":      "08_Publishing/reporters/reporter_infra.md",
-        "spurs":      "08_Publishing/reporters/reporter_spurs.md",
-        "premier":    "08_Publishing/reporters/reporter_premier.md",
-        "europe":     "08_Publishing/reporters/reporter_europe.md",
-        "serendipity":"08_Publishing/reporters/reporter_serendipity.md"
+        "japan":       "08_Publishing/reporters/reporter_japan.md",
+        "global":      "08_Publishing/reporters/reporter_global.md",
+        "ai":          "08_Publishing/reporters/reporter_ai.md",
+        "infra":       "08_Publishing/reporters/reporter_infra.md",
+        "spurs":       "08_Publishing/reporters/reporter_spurs.md",
+        "premier":     "08_Publishing/reporters/reporter_premier.md",
+        "europe":      "08_Publishing/reporters/reporter_europe.md",
+        "serendipity": "08_Publishing/reporters/reporter_serendipity.md"
     }
     reporter_instructions = {}
     for name, path in reporters.items():
@@ -125,7 +173,12 @@ def main():
     print("\n--- 8名の記者が執筆を開始します ---")
     for name, instruction in reporter_instructions.items():
         print(f"{name} 記者 執筆中...")
-        prompt = f"本日の日付は {today_str} です。あなたの役割定義に従い、直近24時間における重要トピックを必ず3件以上選定し、詳細に執筆してください。各トピックには個別に 'Tandy's Insight' を記述してください。Google Searchで最新情報を収集してから執筆してください。"
+        prompt = (
+            f"本日の日付は {today_str} です。"
+            "あなたの役割定義に従い、直近24時間における重要トピックを必ず3件以上選定し、"
+            "詳細に執筆してください。各トピックには個別に 'Tandy's Insight' を記述してください。"
+            "Google Searchで最新情報を収集してから執筆してください。"
+        )
         try:
             response = gemini_client.models.generate_content(
                 model='gemini-2.5-pro',
@@ -144,17 +197,19 @@ def main():
 
     # 編集長によるパッケージング
     print("\n--- 編集長がパッケージング中 ---")
-    editor_prompt = f"""本日の日付は {today_str} です。8名の記者から以下の原稿が届きました。
-【国内政治・経済】{articles.get('japan','')}
-【国際情勢・世界経済】{articles.get('global','')}
-【AI・テクノロジー】{articles.get('ai','')}
-【通信インフラ】{articles.get('infra','')}
-【トッテナム・Spurs】{articles.get('spurs','')}
-【プレミアリーグ】{articles.get('premier','')}
-【欧州リーグ】{articles.get('europe','')}
-【宇宙・深海・科学】{articles.get('serendipity','')}
-全体のトーンを統一し、表紙（ヘッドラインリード・目次）と編集長社説を追加して、美しいMarkdown形式の朝刊（Tandy Times）を完成させてください。"""
-
+    editor_prompt = (
+        f"本日の日付は {today_str} です。8名の記者から以下の原稿が届きました。\n"
+        f"【国内政治・経済】{articles.get('japan','')}\n"
+        f"【国際情勢・世界経済】{articles.get('global','')}\n"
+        f"【AI・テクノロジー】{articles.get('ai','')}\n"
+        f"【通信インフラ】{articles.get('infra','')}\n"
+        f"【トッテナム・Spurs】{articles.get('spurs','')}\n"
+        f"【プレミアリーグ】{articles.get('premier','')}\n"
+        f"【欧州リーグ】{articles.get('europe','')}\n"
+        f"【宇宙・深海・科学】{articles.get('serendipity','')}\n"
+        "全体のトーンを統一し、表紙（ヘッドラインリード・目次）と編集長社説を追加して、"
+        "美しいMarkdown形式の朝刊（Tandy Times）を完成させてください。"
+    )
     draft = gemini_client.models.generate_content(
         model='gemini-2.5-pro', contents=editor_prompt,
         config=types.GenerateContentConfig(system_instruction=editor_instruction, temperature=0.7)
@@ -173,24 +228,28 @@ def main():
 
     # Compliance監査
     print("\n--- Compliance監査中 ---")
-    compliance_prompt = f"""編集長から朝刊ドラフトが届きました。
-【朝刊ドラフト】{draft}
-ハルシネーションがないかを検証し、以下のURL検証ログと合わせて監査レポートを作成してください。
-【URLログ】{link_report}
-最後に朝刊ドラフトの末尾に監査レポートをドッキングした最終版を書き出してください。"""
-
+    compliance_prompt = (
+        f"編集長から朝刊ドラフトが届きました。\n【朝刊ドラフト】{draft}\n"
+        f"ハルシネーションがないかを検証し、以下のURL検証ログと合わせて監査レポートを作成してください。\n"
+        f"【URLログ】{link_report}\n"
+        "最後に朝刊ドラフトの末尾に監査レポートをドッキングした最終版を書き出してください。"
+    )
     final = gemini_client.models.generate_content(
         model='gemini-2.5-pro', contents=compliance_prompt,
         config=types.GenerateContentConfig(system_instruction=auditor_instruction, temperature=0.7)
     ).text
     print("Compliance監査完了。")
 
-    # Googleドライブへ納品
+    # Googleドライブへ納品（既存ファイルを上書き更新）
     print("\n--- Googleドライブへ朝刊を納品中 ---")
-    newsletters_folder_id = drive.get_or_create_folder_by_path("Outputs/newsletters")
-    filename = f"{datetime.date.today().strftime('%Y%m%d')}_newsletter.md"
-    file_id = drive.upload_new_file(newsletters_folder_id, filename, final)
-    print(f"✅ 朝刊の納品完了！ファイル名: {filename} (ID: {file_id})")
+    newsletters_folder_id = drive.get_folder_id_by_path("Outputs/newsletters")
+    if not newsletters_folder_id:
+        raise FileNotFoundError("Outputs/newsletters フォルダが見つかりません。")
+
+    file_id = drive.update_existing_file(newsletters_folder_id, final)
+    print(f"✅ 朝刊の納品完了！ (ID: {file_id})")
+    print(f"   本日付: {today_str}")
+
 
 if __name__ == "__main__":
     try:
@@ -199,12 +258,4 @@ if __name__ == "__main__":
         tb = traceback.format_exc()
         print("\n!!! ERROR DETAILS IN CLOUD !!!")
         print(tb)
-        try:
-            drive_client = TandyDriveClient()
-            errors_folder_id = drive_client.get_or_create_folder_by_path("Outputs/errors")
-            err_filename = f"error_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
-            drive_client.upload_new_file(errors_folder_id, err_filename, tb)
-            print(f"エラーログをGoogleドライブに保存しました: {err_filename}")
-        except Exception as ex:
-            print(f"エラーログのアップロードに失敗: {ex}")
         sys.exit(1)
