@@ -33,7 +33,6 @@ class TandyDriveClient:
         for i, part in enumerate(parts):
             is_last = (i == len(parts) - 1)
             if is_last:
-                # ファイルはGoogle Docs含むすべての種類で検索
                 query = f"'{current_parent}' in parents and name = '{part}' and trashed = false"
             else:
                 query = f"'{current_parent}' in parents and name = '{part}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
@@ -63,25 +62,17 @@ class TandyDriveClient:
 
     def read_file_content(self, file_id):
         import io
-        # Google Docsの場合はtextとしてエクスポート
-        try:
-            request = self.service.files().export_media(fileId=file_id, mimeType='text/plain')
-        except Exception:
-            request = self.service.files().get_media(fileId=file_id)
-        fh = io.BytesIO()
-        downloader = MediaIoBaseDownload(fh, request)
-        done = False
-        while not done:
-            status, done = downloader.next_chunk()
-        return fh.getvalue().decode('utf-8')
+        # ファイルのメタデータを取得してMIMEタイプを判別
+        file_metadata = self.service.files().get(fileId=file_id, fields='mimeType').execute()
+        mime_type = file_metadata.get('mimeType', '')
 
-    def read_file_content_smart(self, file_id, mime_type=None):
-        """Google Docs/通常ファイルを自動判別して読み込む"""
-        import io
-        if mime_type and 'google-apps.document' in mime_type:
+        if 'application/vnd.google-apps.document' in mime_type:
+            # Googleドキュメントの場合はテキストとしてエクスポート
             request = self.service.files().export_media(fileId=file_id, mimeType='text/plain')
         else:
+            # 通常のテキストファイルやMarkdownファイルの場合は通常ダウンロード
             request = self.service.files().get_media(fileId=file_id)
+
         fh = io.BytesIO()
         downloader = MediaIoBaseDownload(fh, request)
         done = False
@@ -90,12 +81,6 @@ class TandyDriveClient:
         return fh.getvalue().decode('utf-8')
 
     def update_existing_file(self, folder_id, content):
-        """
-        フォルダ内の 'latest_newsletter' ファイルを上書き更新する。
-        サービスアカウントは新規ファイル作成不可のため、
-        ユーザーが事前に作成した既存ファイルを更新する方式を採用。
-        """
-        # latest_newsletter という名前のファイルを検索
         query = f"'{folder_id}' in parents and name contains 'latest_newsletter' and trashed = false"
         results = self.service.files().list(q=query, fields='files(id, name, mimeType)').execute()
         files = results.get('files', [])
@@ -103,15 +88,12 @@ class TandyDriveClient:
         if not files:
             raise FileNotFoundError(
                 "'latest_newsletter' ファイルがnewslettersフォルダ内に見つかりません。"
-                "Googleドライブの Outputs/newsletters フォルダに、"
-                "'latest_newsletter' という名前のGoogleドキュメントを手動で作成してください。"
             )
 
         file_id = files[0]['id']
         file_name = files[0]['name']
         print(f"更新対象ファイル発見: {file_name} (ID: {file_id})")
 
-        # 一時ファイルに書き出してアップロード
         temp_filename = "temp_newsletter.md"
         with open(temp_filename, 'w', encoding='utf-8') as f:
             f.write(content)
@@ -208,7 +190,7 @@ def main():
         f"【欧州リーグ】{articles.get('europe','')}\n"
         f"【宇宙・深海・科学】{articles.get('serendipity','')}\n"
         "全体のトーンを統一し、表紙（ヘッドラインリード・目次）と編集長社説を追加して、"
-        "美しいMarkdown形式の朝刊（Tandy Times）を完成させてください。"
+        "美しいMarkdown形式 of 朝刊（Tandy Times）を完成させてください。"
     )
     draft = gemini_client.models.generate_content(
         model='gemini-2.5-pro', contents=editor_prompt,
