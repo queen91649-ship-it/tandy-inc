@@ -549,4 +549,27 @@ body {
     box-shadow: 0 0 10px rgba(0, 240, 255, 0.15);
 }
 
+/* 4つの意思決定ボタン用のホバーエフェクト拡張 */
+.btn-warning:hover {
+    filter: brightness(1.1);
+    box-shadow: 0 0 15px rgba(245, 158, 11, 0.3);
+}
+
+.btn-danger:hover {
+    filter: brightness(1.1);
+    box-shadow: 0 0 15px rgba(239, 68, 68, 0.3);
+}
+
+/* 保留中・却下済などのバッジ指定用クラス */
+.status-badge.hold {
+    background-color: rgba(245, 158, 11, 0.15) !important;
+    color: #f59e0b !important;
+}
+
+.status-badge.new {
+    background-color: rgba(157, 0, 255, 0.15) !important;
+    color: #9d00ff !important;
+}
+
+
 

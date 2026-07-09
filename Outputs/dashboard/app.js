@@ -92,14 +92,14 @@ function initDragAndDrop() {
         dropzone.classList.remove('dragover');
         
         if (draggedProposalName) {
-            openApproveModal(draggedProposalName);
+            openActionModal(draggedProposalName, 'adopt');
         }
     });
     
     // ドロップゾーンをクリックしても採用フローに入れるようにする
     dropzone.addEventListener('click', () => {
         if (currentSelectedProposal) {
-            openApproveModal(currentSelectedProposal);
+            openActionModal(currentSelectedProposal, 'adopt');
         } else {
             alert("まず、左側のリストから採用したい提案を選択するか、直接ドラッグ＆ドロップしてください。");
         }
@@ -131,6 +131,10 @@ async function scanInbox() {
                 badgeBg = 'rgba(157, 0, 255, 0.15)';
                 badgeColor = '#9d00ff';
                 label = '実行要求';
+            } else if (file.name.startsWith('【再考依頼】')) {
+                badgeBg = 'rgba(245, 158, 11, 0.15)';
+                badgeColor = '#f59e0b';
+                label = '再考依頼';
             }
             
             li.innerHTML = `<span>📄 ${file.name}</span><span class="status-badge" style="background-color:${badgeBg};color:${badgeColor};">${label}</span>`;
@@ -168,7 +172,7 @@ async function scanPendingApproval() {
     }
 }
 
-// 提案書リストの取得
+// 提案書リストの取得 (保留中バッジのサポート)
 async function loadProposals() {
     const listElement = document.getElementById('proposal-list-items');
     try {
@@ -184,7 +188,6 @@ async function loadProposals() {
         proposals.forEach(p => {
             const li = document.createElement('li');
             li.className = 'file-item';
-            li.style.borderLeftColor = '#9d00ff'; // パープル
             
             // ドラッグ可能属性とイベントの設定
             li.setAttribute('draggable', 'true');
@@ -202,7 +205,19 @@ async function loadProposals() {
             const date = new Date(p.created);
             const dateStr = `${date.getMonth()+1}/${date.getDate()} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
             
-            li.innerHTML = `<span>💡 ${p.name}</span><span class="status-badge" style="background-color:rgba(157, 0, 255, 0.15);color:#9d00ff;">${dateStr}</span>`;
+            // 保留中と新規でバッジと線の色を変更
+            let badgeClass = 'status-badge new';
+            let labelStr = dateStr;
+            
+            if (p.status === 'pending') {
+                badgeClass = 'status-badge hold';
+                labelStr = '保留中';
+                li.style.borderLeftColor = '#f59e0b'; // オレンジ
+            } else {
+                li.style.borderLeftColor = '#9d00ff'; // パープル
+            }
+            
+            li.innerHTML = `<span>💡 ${p.name}</span><span class="${badgeClass}">${labelStr}</span>`;
             
             li.onclick = () => {
                 currentSelectedProposal = p.name;
@@ -244,13 +259,14 @@ async function viewProposalDetail(name) {
             
         contentElement.innerHTML = `<div style="font-family:'Inter';font-size:14px;line-height:1.6;color:#e5e7eb;padding:10px;">${html}</div>`;
         
-        // 詳細ロードに成功したら、採用アクションエリアを表示する
+        // 詳細ロードに成功したら、採用アクションエリア（4つのボタン）を表示・バインド
         if (actionArea) {
             actionArea.style.display = 'block';
-            const btn = document.getElementById('btn-adopt-proposal');
-            if (btn) {
-                btn.onclick = () => openApproveModal(name);
-            }
+            
+            document.getElementById('btn-adopt-proposal').onclick = () => openActionModal(name, 'adopt');
+            document.getElementById('btn-rethink-proposal').onclick = () => openActionModal(name, 'rethink');
+            document.getElementById('btn-hold-proposal').onclick = () => executeImmediateAction(name, 'hold');
+            document.getElementById('btn-reject-proposal').onclick = () => executeImmediateAction(name, 'reject');
         }
         
     } catch (error) {
@@ -258,15 +274,8 @@ async function viewProposalDetail(name) {
     }
 }
 
-// 採用ボタン（詳細プレビュー上のボタン）のクリックハンドラ
-function adoptSelectedProposal() {
-    if (currentSelectedProposal) {
-        openApproveModal(currentSelectedProposal);
-    }
-}
-
-// 採用・承認モーダルを開く
-function openApproveModal(name) {
+// 採用 / 再考依頼モーダル（コメント入力あり）の起動制御
+function openActionModal(name, action) {
     const modal = document.getElementById('approve-modal');
     const title = document.getElementById('approve-modal-title');
     const msg = document.getElementById('approve-modal-msg');
@@ -275,63 +284,116 @@ function openApproveModal(name) {
     
     if (!modal) return;
     
-    // 初期化
-    title.textContent = "提案を採用しますか？";
-    msg.innerHTML = `選択された <strong>${name}</strong> を採用し、コメントを添えて Inbox フォルダ（採用棚）へ投入します。`;
+    // アクションに応じたテキスト切替
+    if (action === 'adopt') {
+        title.textContent = "提案を採用しますか？";
+        msg.innerHTML = `選択された <strong>${name}</strong> を採用し、追加指示を添えて Inbox （採用棚）へ投入します。`;
+        commentField.placeholder = "例:『このデザインをベースに、フォントをInterに変更して進めてください』『提案Aのコスト最適化から実装を開始してください』";
+        submitBtn.textContent = "採用してInboxへ投入";
+        submitBtn.style.background = "linear-gradient(135deg, #00f0ff 0%, #9d00ff 100%)";
+        submitBtn.style.color = "#ffffff";
+    } else if (action === 'rethink') {
+        title.textContent = "提案の再考を依頼しますか？";
+        msg.innerHTML = `選択された <strong>${name}</strong> を再検討するため、CEOフィードバックを添えて Inbox （再考棚）へ差し戻します。`;
+        commentField.placeholder = "例:『コスト試算について、より低価格なAPI（Gemini 2.5 Flash）をベースに再見積もりを行ってください』";
+        submitBtn.textContent = "再考を依頼する";
+        submitBtn.style.background = "#f59e0b";
+        submitBtn.style.color = "#0a0f1d";
+    }
+    
     commentField.value = '';
     
-    // 送信処理のバインド
+    // 送信ボタンのハンドリング
     submitBtn.onclick = async () => {
         const comment = commentField.value;
         submitBtn.disabled = true;
-        submitBtn.textContent = '送信中...';
         
         try {
-            const response = await fetch('/api/proposals/approve', {
+            const response = await fetch('/api/proposals/action', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ name, comment })
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, action, comment })
             });
-            
             const result = await response.json();
             closeApproveModal();
             
             if (result.status === 'success') {
-                // 成功アラートを表示
-                showAdoptSuccessModal(result.targetFile);
+                showActionResultModal(action, result.targetFile);
             } else {
-                alert("採用処理に失敗しました: " + result.message);
+                alert("処理に失敗しました: " + result.message);
             }
         } catch (err) {
             alert("エラーが発生しました。");
         } finally {
             submitBtn.disabled = false;
-            submitBtn.textContent = '採用してInboxへ投入';
         }
     };
     
     modal.classList.add('active');
 }
 
-// 採用モーダルを閉じる
+// モーダルクローズ
 function closeApproveModal() {
     const modal = document.getElementById('approve-modal');
     if (modal) modal.classList.remove('active');
 }
 
-// 採用成功モーダルの表示（既存のconfirm-modalを再利用）
-function showAdoptSuccessModal(targetFile) {
+// コメント不要アクション（保留・却下）の即時実行
+async function executeImmediateAction(name, action) {
+    let actionLabel = action === 'hold' ? '保留' : '却下';
+    let confirmMsg = action === 'hold' 
+        ? `この提案「${name}」を一時保留にしますか？（保留フォルダへ移動し、リストにオレンジ色のバッジで維持されます）`
+        : `この提案「${name}」を却下しますか？（不採用フォルダへ移動し、リストから非表示になります）`;
+        
+    if (!confirm(confirmMsg)) return;
+    
+    try {
+        const response = await fetch('/api/proposals/action', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, action })
+        });
+        const result = await response.json();
+        
+        if (result.status === 'success') {
+            showActionResultModal(action);
+        } else {
+            alert(`${actionLabel}処理に失敗しました: ` + result.message);
+        }
+    } catch (err) {
+        alert("通信エラーが発生しました。");
+    }
+}
+
+// 決定処理完了時の成功ダイアログ表示
+function showActionResultModal(action, targetFile) {
     const modal = document.getElementById('confirm-modal');
     const msg = document.getElementById('modal-msg');
+    const title = modal.querySelector('.modal-title');
     
-    msg.innerHTML = `提案が正常に承認され、Inbox へ投入されました！<br><br>- 作成された指示書: <span style="color:#00f0ff; font-weight:600;">${targetFile}</span><br><br>毎日9:00および17:00の自動スキャン監視、または手動操作によって、AIエージェント達が自動で実行（開発・執筆）を開始します。`;
+    title.textContent = "意思決定を処理しました";
+    
+    if (action === 'adopt') {
+        msg.innerHTML = `提案が正常に承認され、採用されました！<br><br>- 作成された指示書: <span style="color:#00f0ff; font-weight:600;">${targetFile}</span><br><br>定期監視フローまたは手動指示により、AIエージェント達が自動で実行プロセス（開発・執筆）を開始します。`;
+    } else if (action === 'rethink') {
+        msg.innerHTML = `再考依頼が送信され、Inbox へ投函されました。<br><br>- 再考要求書: <span style="color:#f59e0b; font-weight:600;">${targetFile}</span><br><br>次回定期監視スキャン時に、AIがCEOの指示を取り入れた「修正提案書(v2)」を自動で再生成してデリバリーします。`;
+    } else if (action === 'hold') {
+        msg.innerHTML = `提案を保留にしました。<br><br>リスト上には「保留中」としてオレンジ色のバッジで維持され、いつでも後から採用・却下を再判断できます。`;
+    } else if (action === 'reject') {
+        msg.innerHTML = `提案を不採用（却下）にしました。<br><br>この提案書は非表示フォルダへ移動し、一覧リストから除外されました。`;
+    }
     
     modal.classList.add('active');
     
-    // リストの更新
+    // 一覧・Inboxリロード
     scanInbox();
+    loadProposals();
+    
+    // 詳細エリアのリセット
+    document.getElementById('proposal-detail-title').textContent = '提案書のプレビュー';
+    document.getElementById('proposal-detail-content').innerHTML = '<p class="preview-placeholder">左側の提案一覧から確認したい提案を選択してください。</p>';
+    document.getElementById('proposal-action-area').style.display = 'none';
+    currentSelectedProposal = null;
 }
 
 // クラウド定期監視ステータスの取得
@@ -591,8 +653,7 @@ function simulateWorkflowRun(mode) {
 function showConfirmModal(modeName) {
     const modal = document.getElementById('confirm-modal');
     const msg = document.getElementById('modal-msg');
-    msg.innerHTML = `<strong>【${modeName}】</strong> の自動処理がすべて完了しました。<br>各監査・品質テストをすべて通過し、完成版アセットが保存されました。`;
-    modal.classList.add('active');
+    modal.classList.remove('active');
 }
 
 // 完了モーダル閉じる

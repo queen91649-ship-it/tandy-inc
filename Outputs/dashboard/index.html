@@ -239,9 +239,20 @@
                             </div>
                             <!-- 追加: 採用アクションエリア -->
                             <div id="proposal-action-area" style="margin-top: 16px; display: none;">
-                                <button class="btn btn-primary" id="btn-adopt-proposal" style="width: 100%; background: linear-gradient(135deg, #9d00ff 0%, #00f0ff 100%); color:#ffffff; font-size:14px; padding:14px; font-weight:700;">
-                                    📥 この提案を採用（承認してInboxへ投入）
-                                </button>
+                                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; width: 100%;">
+                                    <button class="btn btn-primary" id="btn-adopt-proposal" style="background: linear-gradient(135deg, #00f0ff 0%, #9d00ff 100%); color:#ffffff; font-size:13px; font-weight:700; padding: 14px 8px;">
+                                        📥 採用 (実行要求)
+                                    </button>
+                                    <button class="btn btn-warning" id="btn-rethink-proposal" style="background: #f59e0b; color:#0a0f1d; font-size:13px; font-weight:700; padding: 14px 8px; border-color: #f59e0b;">
+                                        🔄 再考を依頼する
+                                    </button>
+                                    <button class="btn btn-secondary" id="btn-hold-proposal" style="font-size:13px; font-weight:700; padding: 14px 8px;">
+                                        ⏸️ 保留にする
+                                    </button>
+                                    <button class="btn btn-danger" id="btn-reject-proposal" style="background: #ef4444; color:#ffffff; font-size:13px; font-weight:700; padding: 14px 8px; border-color: #ef4444;">
+                                        🗑️ 却下する
+                                    </button>
+                                </div>
                             </div>
                         </section>
                     </div>

@@ -68,26 +68,46 @@ const server = http.createServer((req, res) => {
         return;
     }
 
-    // API 2.5: Outputs/proposals 内の提案一覧を取得
+    // API 2.5: Outputs/proposals 内の提案一覧を取得 (通常+保留中のマージ)
     if (req.url === '/api/proposals' && req.method === 'GET') {
         const proposalsPath = path.join(WORKSPACE_ROOT, 'Outputs', 'proposals');
+        const pendingPath = path.join(proposalsPath, 'pending');
         const files = [];
         
+        // 1. 通常の新規提案スキャン
         if (fs.existsSync(proposalsPath)) {
             const list = fs.readdirSync(proposalsPath);
-            list.sort().reverse(); // 最新順
-            
             list.forEach(file => {
                 const fullPath = path.join(proposalsPath, file);
-                if (file !== 'README.md' && fs.statSync(fullPath).isFile() && !file.startsWith('.')) {
+                if (file !== 'README.md' && file !== 'pending' && file !== 'rejected' && file !== 'adopted' && file !== 'rethinking' && fs.statSync(fullPath).isFile() && !file.startsWith('.')) {
                     const stat = fs.statSync(fullPath);
                     files.push({ 
                         name: file, 
-                        created: stat.mtime
+                        created: stat.mtime,
+                        status: 'new'
                     });
                 }
             });
         }
+        
+        // 2. 保留中の提案スキャン
+        if (fs.existsSync(pendingPath)) {
+            const list = fs.readdirSync(pendingPath);
+            list.forEach(file => {
+                const fullPath = path.join(pendingPath, file);
+                if (file !== 'README.md' && fs.statSync(fullPath).isFile() && !file.startsWith('.')) {
+                    const stat = fs.statSync(fullPath);
+                    files.push({ 
+                        name: file, 
+                        created: stat.mtime,
+                        status: 'pending'
+                    });
+                }
+            });
+        }
+        
+        // 更新日時が新しい順にソート
+        files.sort((a, b) => new Date(b.created) - new Date(a.created));
         
         res.writeHead(200, {
             'Content-Type': 'application/json; charset=utf-8',
@@ -97,7 +117,7 @@ const server = http.createServer((req, res) => {
         return;
     }
 
-    // API 2.6: 個別の提案書の内容を返す
+    // API 2.6: 個別の提案書の内容を返す (通常、保留中、採用済、再考中すべてに対応)
     if (req.url.startsWith('/api/proposals/detail') && req.method === 'GET') {
         const urlObj = new URL(req.url, `http://${req.headers.host}`);
         const fileName = urlObj.searchParams.get('name');
@@ -108,10 +128,26 @@ const server = http.createServer((req, res) => {
             return;
         }
         
-        const filePath = path.join(WORKSPACE_ROOT, 'Outputs', 'proposals', fileName);
+        const proposalsPath = path.join(WORKSPACE_ROOT, 'Outputs', 'proposals');
         
-        if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
-            const content = fs.readFileSync(filePath, 'utf8');
+        // 探索するパス候補リスト
+        const pathsToSearch = [
+            path.join(proposalsPath, fileName),
+            path.join(proposalsPath, 'pending', fileName),
+            path.join(proposalsPath, 'adopted', fileName),
+            path.join(proposalsPath, 'rethinking', fileName)
+        ];
+        
+        let foundPath = null;
+        for (const p of pathsToSearch) {
+            if (fs.existsSync(p) && fs.statSync(p).isFile()) {
+                foundPath = p;
+                break;
+            }
+        }
+        
+        if (foundPath) {
+            const content = fs.readFileSync(foundPath, 'utf8');
             res.writeHead(200, {
                 'Content-Type': 'text/markdown; charset=utf-8',
                 'Access-Control-Allow-Origin': '*'
@@ -124,8 +160,8 @@ const server = http.createServer((req, res) => {
         return;
     }
 
-    // API 2.7: 提案の承認 (Inboxへのコメント付きコピー投函)
-    if (req.url === '/api/proposals/approve' && req.method === 'POST') {
+    // API 2.7: 提案に対する経営意思決定アクション (採用・再考・保留・却下)
+    if (req.url === '/api/proposals/action' && req.method === 'POST') {
         let body = '';
         req.on('data', chunk => {
             body += chunk.toString();
@@ -135,53 +171,108 @@ const server = http.createServer((req, res) => {
             try {
                 const data = JSON.parse(body);
                 const fileName = data.name;
+                const action = data.action; // 'adopt', 'rethink', 'hold', 'reject'
                 const comment = data.comment || '';
                 
-                if (!fileName || fileName.includes('..') || path.isAbsolute(fileName)) {
+                if (!fileName || fileName.includes('..') || path.isAbsolute(fileName) || !action) {
                     res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
                     res.end(JSON.stringify({ status: 'error', message: 'Bad Request' }));
                     return;
                 }
                 
-                const sourcePath = path.join(WORKSPACE_ROOT, 'Outputs', 'proposals', fileName);
+                const proposalsPath = path.join(WORKSPACE_ROOT, 'Outputs', 'proposals');
                 const inboxPath = path.join(WORKSPACE_ROOT, 'Inbox');
                 
-                if (!fs.existsSync(sourcePath)) {
+                // 対象ソースファイルの検索 (新規フォルダ または pending フォルダ)
+                const searchPaths = [
+                    path.join(proposalsPath, fileName),
+                    path.join(proposalsPath, 'pending', fileName)
+                ];
+                
+                let sourcePath = null;
+                for (const p of searchPaths) {
+                    if (fs.existsSync(p)) {
+                        sourcePath = p;
+                        break;
+                    }
+                }
+                
+                if (!sourcePath) {
                     res.writeHead(404, { 'Content-Type': 'application/json; charset=utf-8' });
-                    res.end(JSON.stringify({ status: 'error', message: 'Proposal not found' }));
+                    res.end(JSON.stringify({ status: 'error', message: 'Proposal file not found.' }));
                     return;
                 }
                 
                 let fileContent = fs.readFileSync(sourcePath, 'utf8');
+                const todayStr = new Date().toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' });
                 
-                // コメントが入力されている場合はファイルの末尾に追記
-                if (comment.trim() !== '') {
-                    const todayStr = new Date().toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' });
-                    fileContent += `\n\n## CEOからの追加指示 / コメント\n- 承認日時: ${todayStr} (日本時間)\n- 指示内容:\n  ${comment.replace(/\n/g, '\n  ')}\n`;
+                // サブフォルダの自動作成
+                const ensureDir = (dirPath) => {
+                    if (!fs.existsSync(dirPath)) {
+                        fs.mkdirSync(dirPath, { recursive: true });
+                    }
+                };
+                
+                if (action === 'adopt' || action === 'rethink') {
+                    // コメントが入力されている場合はファイルの末尾に追記
+                    if (comment.trim() !== '') {
+                        const headerStr = action === 'adopt' ? 'CEOからの追加指示 / コメント' : 'CEOからの再考指示 / フィードバック';
+                        fileContent += `\n\n## ${headerStr}\n- アクション日時: ${todayStr} (日本時間)\n- 内容:\n  ${comment.replace(/\n/g, '\n  ')}\n`;
+                    }
+                    
+                    // ファイル名の整形 (Inboxへの投函用)
+                    const prefix = action === 'adopt' ? '【実行要求】' : '【再考依頼】';
+                    let targetName = fileName.replace('【AI提案】', prefix);
+                    if (!targetName.startsWith(prefix)) {
+                        targetName = prefix + targetName;
+                    }
+                    
+                    ensureDir(inboxPath);
+                    fs.writeFileSync(path.join(inboxPath, targetName), fileContent, 'utf8');
+                    
+                    // 元の提案ファイルを移動 (整理整頓)
+                    const destSubdir = action === 'adopt' ? 'adopted' : 'rethinking';
+                    const destDir = path.join(proposalsPath, destSubdir);
+                    ensureDir(destDir);
+                    fs.renameSync(sourcePath, path.join(destDir, fileName));
+                    
+                    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+                    res.end(JSON.stringify({ 
+                        status: 'success', 
+                        message: `Proposal ${action}ed successfully.`, 
+                        action,
+                        targetFile: targetName 
+                    }));
+                    
+                } else if (action === 'hold') {
+                    // 保留中 (Outputs/proposals/pending/ へ移動)
+                    const destDir = path.join(proposalsPath, 'pending');
+                    ensureDir(destDir);
+                    
+                    // すでにpending配下にある場合は何もしない
+                    if (sourcePath !== path.join(destDir, fileName)) {
+                        fs.renameSync(sourcePath, path.join(destDir, fileName));
+                    }
+                    
+                    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+                    res.end(JSON.stringify({ status: 'success', message: 'Proposal put on hold.', action }));
+                    
+                } else if (action === 'reject') {
+                    // 却下 (Outputs/proposals/rejected/ へ移動)
+                    const destDir = path.join(proposalsPath, 'rejected');
+                    ensureDir(destDir);
+                    fs.renameSync(sourcePath, path.join(destDir, fileName));
+                    
+                    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+                    res.end(JSON.stringify({ status: 'success', message: 'Proposal rejected.', action }));
+                    
+                } else {
+                    res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
+                    res.end(JSON.stringify({ status: 'error', message: 'Invalid action.' }));
                 }
-                
-                // ファイル名から「【AI提案】」を「【実行要求】」に変更
-                let targetName = fileName.replace('【AI提案】', '【実行要求】');
-                if (!targetName.startsWith('【実行要求】')) {
-                    targetName = '【実行要求】' + targetName;
-                }
-                
-                // Inboxフォルダが存在することを確認
-                if (!fs.existsSync(inboxPath)) {
-                    fs.mkdirSync(inboxPath, { recursive: true });
-                }
-                
-                const destinationPath = path.join(inboxPath, targetName);
-                fs.writeFileSync(destinationPath, fileContent, 'utf8');
-                
-                res.writeHead(200, {
-                    'Content-Type': 'application/json; charset=utf-8',
-                    'Access-Control-Allow-Origin': '*'
-                });
-                res.end(JSON.stringify({ status: 'success', message: 'Proposal approved and copied to Inbox.', targetFile: targetName }));
                 
             } catch (error) {
-                console.error("Error approving proposal: ", error);
+                console.error("Error executing action: ", error);
                 res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
                 res.end(JSON.stringify({ status: 'error', message: 'Internal Server Error' }));
             }
@@ -236,7 +327,7 @@ const server = http.createServer((req, res) => {
         return;
     }
 
-    // API 5: ワークフロー実行リクエスト (ローカル模擬実行用)
+    // API 5: ワークフロー実行リクエスト
     if (req.url === '/api/run-workflow' && req.method === 'POST') {
         res.writeHead(200, {
             'Content-Type': 'application/json; charset=utf-8',
