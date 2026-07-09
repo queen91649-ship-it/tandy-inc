@@ -84,8 +84,9 @@ class TandyDriveClient:
 
     def archive_and_update_newsletter(self, folder_id, content):
         """
-        前回の 'latest_newsletter' を日付付きで複製コピーしてアーカイブ保存し、
-        元の 'latest_newsletter' の内容を Google Docs API で上書き更新＆フォーマット整形する。
+        前回の 'latest_newsletter' の複製コピーはサービスアカウントの容量制限（上限0バイト）を回避するため行わず、
+        代わりにローカルの Outputs/newsletters/ 内にMarkdownとしてアーカイブを出力し、
+        Google Docs（latest_newsletter）はDocs APIで上書き更新する。
         """
         # 1. 既存の latest_newsletter を検索
         query = f"'{folder_id}' in parents and name contains 'latest_newsletter' and trashed = false"
@@ -97,16 +98,14 @@ class TandyDriveClient:
 
         latest_id = files[0]['id']
         
-        # 2. 前日の内容を日付付きファイル名でコピー（アーカイブ）
-        archive_name = f"{datetime.date.today().strftime('%Y%m%d')}_newsletter"
-        print(f"前日のニュースレターをコピーアーカイブ中: {archive_name}")
-        self.service.files().copy(
-            fileId=latest_id,
-            body={'name': archive_name}
-        ).execute()
-
-        # 古いアーカイブをクリーンアップ（30日分を保持）
-        self.cleanup_old_archives(folder_id, keep_days=30)
+        # 2. ローカルに日付付きMarkdownでアーカイブを保存（GitHub Actionsがこれをコミットして履歴保存する）
+        archive_name = f"{datetime.date.today().strftime('%Y%m%d')}_newsletter.md"
+        local_dir = "Outputs/newsletters"
+        os.makedirs(local_dir, exist_ok=True)
+        local_path = os.path.join(local_dir, archive_name)
+        with open(local_path, "w", encoding="utf-8") as f:
+            f.write(content)
+        print(f"ローカルアーカイブにニュースレターを保存しました: {local_path}")
 
         # 3. Google Docs API を用いた本番上書き ＆ 自己肯定感が上がる美麗フォーマットの適用
         print("最新ニュースレターを上書き更新 ＆ 知的フォーマット整形中...")

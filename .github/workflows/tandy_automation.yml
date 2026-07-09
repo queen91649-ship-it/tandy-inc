@@ -2,8 +2,10 @@ name: Tandy.inc Daily Newsletter Automation
 
 on:
   schedule:
+    # 毎日日本時間 AM 6:00 (UTC PM 21:00) に自動起動
     - cron: '0 21 * * *'
   workflow_dispatch:
+    # GitHub上の管理画面から手動でポチッとデバッグ起動できるようにする設定
     inputs:
       reason:
         description: '手動実行の理由'
@@ -11,34 +13,56 @@ on:
         default: '手動テスト起動'
 
 permissions:
-  contents: read
+  id-token: write  # GCP Workload Identity OIDC トークン生成に必須
+  contents: write  # アーカイブのコミット＆プッシュのためにwriteへ変更
 
 jobs:
   run-tandy-times:
     runs-on: ubuntu-latest
 
     steps:
+    # 1. GitHubリポジトリのチェックアウト
     - name: Checkout repository
       uses: actions/checkout@v4
 
+    # 2. Pythonのセットアップ
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
-        python-version: '3.11'
+        python-version: '3.10'
 
+    # 3. 依存ライブラリのインストール
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
         pip install google-api-python-client google-auth-httplib2 google-auth-oauthlib google-genai
 
-    - name: Set up GCP credentials
-      run: |
-        echo '${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}' > /tmp/gcp_key.json
+    # 4. GCP Workload Identity 連携認証
+    - name: Authenticate to Google Cloud
+      id: auth
+      uses: google-github-actions/auth@v2
+      with:
+        workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+        service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+        create_credentials_file: true  # これによりADC(Application Default Credentials)が自動セットアップされます
 
+    # 5. Tandy.inc クラウドコアの実行 (朝刊の自動生成 ＆ 納品)
     - name: Run Tandy.inc Core
       env:
         GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         GOOGLE_DRIVE_ROOT_FOLDER_ID: ${{ vars.GOOGLE_DRIVE_ROOT_FOLDER_ID }}
-        GOOGLE_APPLICATION_CREDENTIALS: /tmp/gcp_key.json
       run: |
         python Outputs/dashboard/tandy_core.py
+
+    # 6. 生成されたアーカイブをGitHubリポジトリにコミット＆プッシュして保存（30日保持ルール対応）
+    - name: Commit and push archived newsletter
+      run: |
+        git config --global user.name "Tandy AI Agent"
+        git config --global user.email "agent@tandy.inc"
+        
+        # 30日以上古いローカルのアーカイブファイルを削除する（30日クリーンアップ）
+        echo "=== ローカルアーカイブの30日クリーンアップを実行中 ==="
+        find Outputs/newsletters/ -name "*_newsletter.md" -type f -mtime +30 -exec rm {} \;
+        
+        git add Outputs/newsletters/
+        git diff --quiet && git diff --staged --quiet || (git commit -m "Archive newsletter for $(date +'%Y-%m-%d')" && git push origin main)
