@@ -135,6 +135,10 @@ async function scanInbox() {
                 badgeBg = 'rgba(245, 158, 11, 0.15)';
                 badgeColor = '#f59e0b';
                 label = '再考依頼';
+            } else if (file.name.startsWith('CEO指示_') || file.name.endsWith('.txt')) {
+                badgeBg = 'rgba(0, 240, 255, 0.15)';
+                badgeColor = '#00f0ff';
+                label = 'CEO指示';
             }
             
             li.innerHTML = `<span>📄 ${file.name}</span><span class="status-badge" style="background-color:${badgeBg};color:${badgeColor};">${label}</span>`;
@@ -172,7 +176,7 @@ async function scanPendingApproval() {
     }
 }
 
-// 提案書リストの取得 (保留中バッジのサポート)
+// 提案書リストの取得 (部門別のカラーバッジ表示)
 async function loadProposals() {
     const listElement = document.getElementById('proposal-list-items');
     try {
@@ -202,19 +206,37 @@ async function loadProposals() {
                 li.classList.remove('dragging');
             });
             
-            const date = new Date(p.created);
-            const dateStr = `${date.getMonth()+1}/${date.getDate()} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
-            
-            // 保留中と新規でバッジと線の色を変更
-            let badgeClass = 'status-badge new';
-            let labelStr = dateStr;
+            let badgeClass = 'status-badge';
+            let labelStr = p.department;
             
             if (p.status === 'pending') {
-                badgeClass = 'status-badge hold';
-                labelStr = '保留中';
+                badgeClass += ' hold';
+                labelStr = '保留: ' + p.department;
                 li.style.borderLeftColor = '#f59e0b'; // オレンジ
             } else {
-                li.style.borderLeftColor = '#9d00ff'; // パープル
+                // 部門に応じたカラーリング設定
+                if (p.department === '経営統括部門') {
+                    badgeClass += ' dept-ceo';
+                    li.style.borderLeftColor = '#00f0ff';
+                } else if (p.department === 'リサーチ部門') {
+                    badgeClass += ' dept-research';
+                    li.style.borderLeftColor = '#9d00ff';
+                } else if (p.department === '制作・開発部門') {
+                    badgeClass += ' dept-creative';
+                    li.style.borderLeftColor = '#3b82f6';
+                } else if (p.department === 'デザイン監査部門') {
+                    badgeClass += ' dept-design';
+                    li.style.borderLeftColor = '#ff007a';
+                } else if (p.department === '品質保証部門') {
+                    badgeClass += ' dept-qa';
+                    li.style.borderLeftColor = '#10b981';
+                } else if (p.department === '法務・広報監査') {
+                    badgeClass += ' dept-auditor';
+                    li.style.borderLeftColor = '#eab308';
+                } else {
+                    badgeClass += ' new';
+                    li.style.borderLeftColor = '#9d00ff';
+                }
             }
             
             li.innerHTML = `<span>💡 ${p.name}</span><span class="${badgeClass}">${labelStr}</span>`;
@@ -271,6 +293,13 @@ async function viewProposalDetail(name) {
         
     } catch (error) {
         contentElement.innerHTML = '<p class="preview-placeholder" style="color:#ef4444;">詳細の取得に失敗しました。</p>';
+    }
+}
+
+// 採用ボタン（詳細プレビュー上のボタン）のクリックハンドラ
+function adoptSelectedProposal() {
+    if (currentSelectedProposal) {
+        openActionModal(currentSelectedProposal, 'adopt');
     }
 }
 
@@ -394,6 +423,55 @@ function showActionResultModal(action, targetFile) {
     document.getElementById('proposal-detail-content').innerHTML = '<p class="preview-placeholder">左側の提案一覧から確認したい提案を選択してください。</p>';
     document.getElementById('proposal-action-area').style.display = 'none';
     currentSelectedProposal = null;
+}
+
+// CEOからの新規指示の直接投函（Inbox保存）処理
+async function submitNewInstructionToInbox() {
+    const titleField = document.getElementById('new-instruction-title');
+    const bodyField = document.getElementById('new-instruction-body');
+    
+    const title = titleField.value.trim();
+    const body = bodyField.value.trim();
+    
+    if (body === '') {
+        alert("指示内容（本文）を入力してください。");
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/inbox/create', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ title, body })
+        });
+        
+        const result = await response.json();
+        
+        if (result.status === 'success') {
+            // フォームをクリア
+            titleField.value = '';
+            bodyField.value = '';
+            
+            // 成功モーダルの表示
+            const modal = document.getElementById('confirm-modal');
+            const msg = document.getElementById('modal-msg');
+            const modalTitle = modal.querySelector('.modal-title');
+            
+            modalTitle.textContent = "インボックスに投函完了";
+            msg.innerHTML = `CEOからの新規指示が正常に投函されました！<br><br>- 作成されたファイル: <span style="color:#00f0ff; font-weight:600;">${result.filename}</span><br><br>毎日9:00および17:00の定期監視スキャンで自動検出され、適切なエージェント部門が実行に入ります。`;
+            
+            modal.classList.add('active');
+            
+            // リストの即時スキャン
+            scanInbox();
+        } else {
+            alert("投函に失敗しました: " + result.message);
+        }
+    } catch (error) {
+        alert("投函処理中にエラーが発生しました。");
+    }
 }
 
 // クラウド定期監視ステータスの取得

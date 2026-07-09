@@ -571,5 +571,40 @@ body {
     color: #9d00ff !important;
 }
 
+/* 部門タグカラー定義 */
+.status-badge.dept-ceo {
+    background-color: rgba(0, 240, 255, 0.12) !important;
+    color: #00f0ff !important;
+}
+.status-badge.dept-research {
+    background-color: rgba(157, 0, 255, 0.12) !important;
+    color: #9d00ff !important;
+}
+.status-badge.dept-creative {
+    background-color: rgba(59, 130, 246, 0.12) !important;
+    color: #3b82f6 !important;
+}
+.status-badge.dept-design {
+    background-color: rgba(255, 0, 122, 0.12) !important;
+    color: #ff007a !important;
+}
+.status-badge.dept-qa {
+    background-color: rgba(16, 185, 129, 0.12) !important;
+    color: #10b981 !important;
+}
+.status-badge.dept-auditor {
+    background-color: rgba(234, 179, 8, 0.12) !important;
+    color: #eab308 !important;
+}
+
+/* CEO指示フォームの装飾 */
+#new-instruction-title:focus, #new-instruction-body:focus {
+    outline: none;
+    border-color: var(--primary) !important;
+    box-shadow: 0 0 10px rgba(0, 240, 255, 0.15) !important;
+}
+
+
+
 
 

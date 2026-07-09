@@ -40,6 +40,59 @@ const server = http.createServer((req, res) => {
         return;
     }
 
+    // API 1.5: CEOからの新規指示投函 (Inboxへファイル保存)
+    if (req.url === '/api/inbox/create' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => {
+            body += chunk.toString();
+        });
+        
+        req.on('end', () => {
+            try {
+                const data = JSON.parse(body);
+                let title = data.title ? data.title.trim() : '';
+                const instructionBody = data.body ? data.body.trim() : '';
+                
+                if (instructionBody === '') {
+                    res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
+                    res.end(JSON.stringify({ status: 'error', message: 'Instruction body cannot be empty.' }));
+                    return;
+                }
+                
+                // タイトルが空の場合はデフォルト名を生成
+                if (title === '') {
+                    const todayStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+                    title = `CEO指示_${todayStr}`;
+                }
+                
+                // ファイル名に使えない記号の除去
+                let fileName = title.replace(/[\\/*?:"<>|]/g, '') + '.txt';
+                
+                const inboxPath = path.join(WORKSPACE_ROOT, 'Inbox');
+                
+                // Inboxフォルダの存在確認・作成
+                if (!fs.existsSync(inboxPath)) {
+                    fs.mkdirSync(inboxPath, { recursive: true });
+                }
+                
+                const filePath = path.join(inboxPath, fileName);
+                fs.writeFileSync(filePath, instructionBody, 'utf8');
+                
+                res.writeHead(200, {
+                    'Content-Type': 'application/json; charset=utf-8',
+                    'Access-Control-Allow-Origin': '*'
+                });
+                res.end(JSON.stringify({ status: 'success', message: 'Instruction successfully submitted to Inbox.', filename: fileName }));
+                
+            } catch (error) {
+                console.error("Error creating manual inbox file: ", error);
+                res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' });
+                res.end(JSON.stringify({ status: 'error', message: 'Internal Server Error' }));
+            }
+        });
+        return;
+    }
+
     // API 2: Pending_Approval（要確認成果物）のファイルスキャン
     if (req.url === '/api/pending-approval' && req.method === 'GET') {
         const pendingPath = path.join(WORKSPACE_ROOT, 'Pending_Approval');
@@ -68,7 +121,7 @@ const server = http.createServer((req, res) => {
         return;
     }
 
-    // API 2.5: Outputs/proposals 内の提案一覧を取得 (通常+保留中のマージ)
+    // API 2.5: Outputs/proposals 内の提案一覧を取得 (通常+保留中のマージ、部門名抽出のサポート)
     if (req.url === '/api/proposals' && req.method === 'GET') {
         const proposalsPath = path.join(WORKSPACE_ROOT, 'Outputs', 'proposals');
         const pendingPath = path.join(proposalsPath, 'pending');
@@ -81,10 +134,19 @@ const server = http.createServer((req, res) => {
                 const fullPath = path.join(proposalsPath, file);
                 if (file !== 'README.md' && file !== 'pending' && file !== 'rejected' && file !== 'adopted' && file !== 'rethinking' && fs.statSync(fullPath).isFile() && !file.startsWith('.')) {
                     const stat = fs.statSync(fullPath);
+                    
+                    // ファイル名から「部門名」を抽出 (【AI提案】YYYYMMDD_部門名_テーマ.md)
+                    let department = 'リサーチ部門';
+                    const match = file.match(/^【AI提案】\d+_(.+?)_(.+)\.md$/);
+                    if (match) {
+                        department = match[1];
+                    }
+                    
                     files.push({ 
                         name: file, 
                         created: stat.mtime,
-                        status: 'new'
+                        status: 'new',
+                        department: department
                     });
                 }
             });
@@ -97,10 +159,19 @@ const server = http.createServer((req, res) => {
                 const fullPath = path.join(pendingPath, file);
                 if (file !== 'README.md' && fs.statSync(fullPath).isFile() && !file.startsWith('.')) {
                     const stat = fs.statSync(fullPath);
+                    
+                    // 保留中のファイルからも「部門名」を抽出
+                    let department = 'リサーチ部門';
+                    const match = file.match(/^【AI提案】\d+_(.+?)_(.+)\.md$/);
+                    if (match) {
+                        department = match[1];
+                    }
+                    
                     files.push({ 
                         name: file, 
                         created: stat.mtime,
-                        status: 'pending'
+                        status: 'pending',
+                        department: department
                     });
                 }
             });
@@ -220,7 +291,7 @@ const server = http.createServer((req, res) => {
                         fileContent += `\n\n## ${headerStr}\n- アクション日時: ${todayStr} (日本時間)\n- 内容:\n  ${comment.replace(/\n/g, '\n  ')}\n`;
                     }
                     
-                    // ファイル名の整形 (Inboxへの投函用)
+                    // ファイル名の整形 (Inboxへの投函用: 【AI提案】YYYYMMDD_部門名_テーマ.md -> 【実行要求】YYYYMMDD_部門名_テーマ.md)
                     const prefix = action === 'adopt' ? '【実行要求】' : '【再考依頼】';
                     let targetName = fileName.replace('【AI提案】', prefix);
                     if (!targetName.startsWith(prefix)) {

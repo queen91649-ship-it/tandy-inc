@@ -119,6 +119,21 @@
                             </div>
                         </section>
     
+                        <!-- 新設: CEOからの新規指示の投函 -->
+                        <section class="card glass" id="ceo-submission-card">
+                            <h2 class="card-title">✍️ CEO新規指示の投函 (Inboxへ追加)</h2>
+                            <p style="font-size: 11px; color: var(--text-muted); margin-bottom: 12px;">
+                                ここに指示内容やアイデアを入力して投函すると、Google Driveの Inbox フォルダにテキストファイルが自動生成されます。毎日2回自動スキャンされます。
+                            </p>
+                            <div style="margin-bottom: 16px;">
+                                <input type="text" id="new-instruction-title" placeholder="指示のタイトル (例: 新規ブログの執筆要求)..." style="width: 100%; background-color: rgba(0,0,0,0.2); border: 1px solid var(--card-border); border-radius: 10px; padding: 12px; color: var(--text-main); font-family: var(--font-inter); font-size: 13px; margin-bottom: 10px;">
+                                <textarea id="new-instruction-body" placeholder="具体的な指示内容や要件を記述してください..." style="width: 100%; height: 100px; background-color: rgba(0,0,0,0.2); border: 1px solid var(--card-border); border-radius: 10px; padding: 12px; color: var(--text-main); font-family: var(--font-inter); font-size: 13px; resize: none;"></textarea>
+                            </div>
+                            <button class="btn btn-primary" onclick="submitNewInstructionToInbox()" style="width: 100%; font-weight:700; background: linear-gradient(135deg, #00f0ff 0%, #9d00ff 100%); color:#ffffff;">
+                                📥 インボックス(Inbox)へ投函する
+                            </button>
+                        </section>
+    
                         <!-- 2. Inbox監視モニター -->
                         <section class="card glass">
                             <h2 class="card-title">インプット（新規ファイル）の監視</h2>
