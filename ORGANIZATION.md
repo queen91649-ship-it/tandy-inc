@@ -85,7 +85,7 @@ graph TD
 | **`01_経営統括`** | **経営・統括部門** | CEOの壁打ち、経営判断の支援、提案計画書の自己監査。 | [ceo_agent.md](file:///g:/マイドライブ/02_AI%20Campany/Tandy.inc/01_経営統括/ceo_agent.md) <br> [auditor_board_agent.md](file:///g:/マイドライブ/02_AI%20Campany/Tandy.inc/01_経営統括/auditor_board_agent.md) |
 | **`02_情報リサーチ`** | **リサーチ部門** | Web検索やRSS等を用いた市場調査、ビジネス活用案の策定。 | [research_agent.md](file:///g:/マイドライブ/02_AI%20Campany/Tandy.inc/02_情報リサーチ/research_agent.md) |
 | **`03_制作開発`** | **制作・開発部門** | ブログ記事、SNS投稿文、およびPythonやHTMLなどのプログラムコードの執筆。 | [creator_agent.md](file:///g:/マイドライブ/02_AI%20Campany/Tandy.inc/03_制作開発/creator_agent.md) |
-| **`04_運営総務`** | **運営・総務部門** | フォルダ間のファイル移動制御、タスクの実行制御、本マニュアルの維持管理。および、GitHub Actions上のスケジュールによるInbox定期監視タスクの実行制御。 | [ops_agent.md](file:///g:/マイドライブ/02_AI%20Campany/Tandy.inc/04_運営総務/ops_agent.md) <br> [inbox_watcher_flow.md](file:///g:/マイドライブ/02_AI%20Campany/Tandy.inc/04_運営総務/inbox_watcher_flow.md) <br> [tandy_watcher.py](file:///g:/マイドライブ/02_AI%20Campany/Tandy.inc/Outputs/dashboard/tandy_watcher.py) <br> [tandy_watcher.yml](file:///g:/マイドライブ/02_AI%20Campany/Tandy.inc/.github/workflows/tandy_watcher.yml) |
+| **`04_運営総務`** | **運営・総務部門** | フォルダ間のファイル移動制御、タスクの実行制御、本マニュアルの維持管理。および、GitHub Actions上のスケジュールによるInbox定期監視タスクの実行制御。 | [ops_agent.md](file:///g:/マイドライブ/02_AI%20Campany/Tandy.inc/04_運営総務/ops_agent.md) <br> [inbox_watcher_flow.md](file:///g:/マイドライブ/02_AI%20Campany/Tandy.inc/04_運営総務/inbox_watcher_flow.md) <br> [tandy_watcher.py](file:///g:/マイドライブ/02_AI%20Campany/Tandy.inc/Outputs/dashboard/tandy_watcher.py) <br> [tandy_watcher.yml](file:///g:/マイドライブ/02_AI%20Campany/Tandy.inc/.github/workflows/tandy_watcher.yml) <br> [tandy_proposal.py](file:///g:/マイドライブ/02_AI%20Campany/Tandy.inc/Outputs/dashboard/tandy_proposal.py) <br> [tandy_proposal.yml](file:///g:/マイドライブ/02_AI%20Campany/Tandy.inc/.github/workflows/tandy_proposal.yml) |
 | **`05_法務監査`** | **法務・広報監査** | ブログ等のテキスト内の事実誤認（ハルシネーション）や著作権侵害・表現リスクの監査。 | [auditor_agent.md](file:///g:/マイドライブ/02_AI%20Campany/Tandy.inc/05_法務監査/auditor_agent.md) |
 | **`06_品質保証`** | **品質保証・テスト** | 生成・修正されたプログラムの静的構文テスト、セキュリティ脆弱性・バグ監査。 | [qa_agent.md](file:///g:/マイドライブ/02_AI%20Campany/Tandy.inc/06_品質保証/qa_agent.md) |
 | **`07_デザイン監査`** | **デザイン・UIUX監査** | Webサイト・HTML/CSSのレイアウト崩れ、カラー、フォント、使いやすさの美的な品質監査。 | [designer_agent.md](file:///g:/マイドライブ/02_AI%20Campany/Tandy.inc/07_デザイン監査/designer_agent.md) |
@@ -98,6 +98,7 @@ graph TD
 現在、[workflow_guide.md](file:///g:/マイドライブ/02_AI%20Campany/Tandy.inc/04_運営総務/workflow_guide.md) に定義されている自動処理フローです。エージェントはトリガーに応じて自動でモードを判定します。
 
 *   **⏱️ 【Inbox定期監視フロー】**: GitHub Actionsにて1日2回（毎日 AM 9:00 / PM 17:00）自動で起動し、`Inbox/` をスキャンして新規ファイルがあった場合に該当する以下のモードを自動で実行する、PC稼働状況不問の自動化フロー。
+*   **⏱️ 【AI提案デリバリーフロー】**: GitHub Actionsにて毎週月曜日の朝 9:00 に起動し、最新トレンドや自律的な課題分析を巡回リサーチし、Tandy.inc への適用提案書（Markdown）を自動生成して `Inbox/` およびダッシュボード（`Outputs/proposals/`）に投函するフロー。
 *   **① 【ブログ記事モード】**: `Inbox/` のアイデアから完成版Markdownを `Outputs/` に保存。
 *   **② 【開発モード】**: 要件定義から監査済み完成コードとレポートをパッケージ出力。
 *   **③ 【UI更新モード】**: ダッシュボード（`Outputs/dashboard/`）のデザイン・機能を直接上書き更新。
@@ -128,7 +129,8 @@ graph TD
 
 ## 5. 特殊フォルダ
 
-* **`Inbox/`**：処理待ちのアイデアや要求ファイルを投入するフォルダ。毎日AM 9:00およびPM 17:00にGitHub Actionsによって自動スキャン・処理されます。
+* **`Inbox/`**：処理待ちのアイデアや要求ファイルを投入するフォルダ。毎日AM 9:00およびPM 17:00にGitHub Actionsによって自動スキャン・処理されます。また、毎週月曜日にAI提案書もここに投函されます。
 * **`Pending_Approval/`**：自動処理中に監査（Auditor/QA）でリスク（ハルシネーション・セキュリティ脆弱性など）が検出された成果物を一時的に隔離・保存するフォルダ。人間（CEO）が確認し、手動で承認または差し戻しを判断します。
 * **`Archive/`**：処理が完了したインプットファイルの履歴保管先。
 * **`Outputs/`**：完成した各種成果物（記事、プログラムパッケージ、調査レポート等）の出力先。
+* **`Outputs/proposals/`**：AIが自発的に生成した過去の提案書がアーカイブ保存されるフォルダ。ダッシュボードの表示データとしても使用されます。

@@ -5,7 +5,7 @@ const workflowDescriptions = {
     dev: "【開発コード生成モード】<br>設計要件から、必要な仕様調査 → 例外処理を徹底したソースコード自動生成 → UIUX_Designによる美観・レスポンシブ監査 → QA_Engineeringによるテストコード実行確認を行い、完成版を出力します。",
     bugfix: "【バグ修正モード】<br>Inboxに投入されたコードとエラーログを元に、原因調査 → 修正コード＆根本原因と対策の解説生成 → UIUXデザイン監査 → QAによる回帰テストを通過させて出力します。",
     research: "【市場調査モード】<br>調べたいテーマについてWebや事例を検索し、競合比較テーブルや導入ROI・コスト試算、リンク生存確認をすべてクリアした一次ソース付きの調査報告書を作成します。",
-    ui_update: "【UIデザイン更新モード】<br>既存のダッシュボードやWebUIの改善指示から、画面レイアウト・CSS・JSの更新箇所を分析 → 制作・自動バックアップ作成 → UIUX_Design監査 → QA動作検証を行い、直接上書き更新します。",
+    ui_update: "【UIデザイン更新モード】<br>既存 of ダッシュボードやWebUIの改善指示から、画面レイアウト・CSS・JSの更新箇所を分析 → 制作・自動バックアップ作成 → UIUX_Design監査 → QA動作検証を行い、直接上書き更新します。",
     newsletter: "【朝のニュースレターモード】<br>毎日朝6:00に自動実行されるモードです。監視リスト（watchlist.txt）の情報源から最新情報を収集し、全トピックに個別ビジネス影響（Tandy's Insight）を付加して出力します。",
     design_audit: "【UIデザイン定期監査 (アイデアD)】<br>現在の自社UIダッシュボード（Outputs/dashboard/）のソースコードや美観を、最新のUIUXトレンドや事例と比較分析。フォント・色彩・レスポンシブ性・アクセシビリティの観点から改善点をまとめた「デザイン改善ロードマップ」を自動生成します。"
 };
@@ -32,6 +32,44 @@ function updateClock() {
 }
 setInterval(updateClock, 1000);
 updateClock();
+
+// タブ切り替え制御
+function initTabs() {
+    const navItems = document.querySelectorAll('.nav-menu .nav-item');
+    const tabContents = document.querySelectorAll('.tab-content');
+    
+    navItems.forEach(item => {
+        item.addEventListener('click', () => {
+            const targetTab = item.getAttribute('data-tab');
+            
+            // 組織マニュアルなどの外部リンクタブはスキップ
+            if (targetTab === 'docs') return;
+            
+            // 全ナビゲーションのactiveを解除
+            navItems.forEach(nav => nav.classList.remove('active'));
+            // クリックしたナビゲーションをactiveに
+            item.classList.add('active');
+            
+            // 全コンテンツを非表示に
+            tabContents.forEach(content => {
+                content.style.display = 'none';
+                content.classList.remove('active');
+            });
+            
+            // 対象コンテンツを表示
+            const activeTab = document.getElementById(`${targetTab}-tab`);
+            if (activeTab) {
+                activeTab.style.display = 'block';
+                activeTab.classList.add('active');
+            }
+            
+            // 提案タブが開かれた場合は、提案データを読み込み
+            if (targetTab === 'proposals') {
+                loadProposals();
+            }
+        });
+    });
+}
 
 // Inboxスキャン
 async function scanInbox() {
@@ -81,6 +119,72 @@ async function scanPendingApproval() {
         });
     } catch (error) {
         listElement.innerHTML = '<li class="file-item loading">承認待ちフォルダのスキャンに失敗しました。</li>';
+    }
+}
+
+// 提案書リストの取得
+async function loadProposals() {
+    const listElement = document.getElementById('proposal-list-items');
+    try {
+        const response = await fetch('/api/proposals');
+        const proposals = await response.json();
+        
+        listElement.innerHTML = '';
+        if (proposals.length === 0) {
+            listElement.innerHTML = '<li class="file-item loading">現在、AIからの提案はありません。</li>';
+            return;
+        }
+        
+        proposals.forEach(p => {
+            const li = document.createElement('li');
+            li.className = 'file-item';
+            li.style.cursor = 'pointer';
+            li.style.borderLeftColor = '#9d00ff'; // パープル
+            
+            const date = new Date(p.created);
+            const dateStr = `${date.getMonth()+1}/${date.getDate()} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+            
+            li.innerHTML = `<span>💡 ${p.name}</span><span class="status-badge" style="background-color:rgba(157, 0, 255, 0.15);color:#9d00ff;">${dateStr}</span>`;
+            
+            li.onclick = () => {
+                viewProposalDetail(p.name);
+            };
+            
+            listElement.appendChild(li);
+        });
+    } catch (error) {
+        listElement.innerHTML = '<li class="file-item loading">提案書のロードに失敗しました。</li>';
+    }
+}
+
+// 個別提案書詳細の取得・描画
+async function viewProposalDetail(name) {
+    const titleElement = document.getElementById('proposal-detail-title');
+    const contentElement = document.getElementById('proposal-detail-content');
+    
+    titleElement.textContent = name;
+    contentElement.innerHTML = '<p class="preview-placeholder">提案書を読み込んでいます...</p>';
+    
+    try {
+        const response = await fetch(`/api/proposals/detail?name=${encodeURIComponent(name)}`);
+        if (!response.ok) throw new Error("Failed to fetch detail");
+        const markdown = await response.text();
+        
+        // 簡易Markdown HTMLコンバータ
+        let html = markdown
+            .replace(/^#\s+(.+)$/gm, '<h1 style="color:#00f0ff;font-family:\'Outfit\';font-size:22px;margin:24px 0 12px 0;">$1</h1>')
+            .replace(/^##\s+(.+)$/gm, '<h2 style="color:#9d00ff;font-family:\'Outfit\';font-size:18px;margin:20px 0 8px 0;border-bottom:1px solid rgba(255,255,255,0.06);padding-bottom:6px;">$1</h2>')
+            .replace(/^###\s+(.+)$/gm, '<h3 style="color:#f3f4f6;font-family:\'Outfit\';font-size:14px;margin:14px 0 6px 0;">$1</h3>')
+            .replace(/^\*\s+(.+)$/gm, '<li style="margin-left:18px;margin-bottom:6px;list-style-type:square;color:#f3f4f6;font-size:13px;">$1</li>')
+            .replace(/^- \s*(.+)$/gm, '<li style="margin-left:18px;margin-bottom:6px;list-style-type:square;color:#f3f4f6;font-size:13px;">$1</li>')
+            .replace(/\*\*(.*?)\*\*/g, '<strong style="color:#00f0ff;">$1</strong>')
+            .replace(/\n\n/g, '<br><br>')
+            .replace(/\n/g, '<br>');
+            
+        contentElement.innerHTML = `<div style="font-family:'Inter';font-size:14px;line-height:1.6;color:#e5e7eb;padding:10px;">${html}</div>`;
+        
+    } catch (error) {
+        contentElement.innerHTML = '<p class="preview-placeholder" style="color:#ef4444;">詳細の取得に失敗しました。</p>';
     }
 }
 
@@ -348,13 +452,13 @@ function showConfirmModal(modeName) {
 // 完了モーダル閉じる
 function closeModal() {
     const modal = document.getElementById('confirm-modal');
-    const msg = document.getElementById('modal-msg');
     modal.classList.remove('active');
 }
 
 // 起動時処理
 window.onload = () => {
     updateClock();
+    initTabs(); // タブ初期化
     
     // 初回読み込み
     scanInbox();

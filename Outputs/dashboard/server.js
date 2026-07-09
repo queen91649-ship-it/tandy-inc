@@ -68,6 +68,62 @@ const server = http.createServer((req, res) => {
         return;
     }
 
+    // API 2.5: Outputs/proposals 内の提案一覧を取得
+    if (req.url === '/api/proposals' && req.method === 'GET') {
+        const proposalsPath = path.join(WORKSPACE_ROOT, 'Outputs', 'proposals');
+        const files = [];
+        
+        if (fs.existsSync(proposalsPath)) {
+            const list = fs.readdirSync(proposalsPath);
+            list.sort().reverse(); // 最新順
+            
+            list.forEach(file => {
+                const fullPath = path.join(proposalsPath, file);
+                if (file !== 'README.md' && fs.statSync(fullPath).isFile() && !file.startsWith('.')) {
+                    const stat = fs.statSync(fullPath);
+                    files.push({ 
+                        name: file, 
+                        created: stat.mtime
+                    });
+                }
+            });
+        }
+        
+        res.writeHead(200, {
+            'Content-Type': 'application/json; charset=utf-8',
+            'Access-Control-Allow-Origin': '*'
+        });
+        res.end(JSON.stringify(files));
+        return;
+    }
+
+    // API 2.6: 個別の提案書の内容を返す
+    if (req.url.startsWith('/api/proposals/detail') && req.method === 'GET') {
+        const urlObj = new URL(req.url, `http://${req.headers.host}`);
+        const fileName = urlObj.searchParams.get('name');
+        
+        if (!fileName || fileName.includes('..') || path.isAbsolute(fileName)) {
+            res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
+            res.end('Bad Request');
+            return;
+        }
+        
+        const filePath = path.join(WORKSPACE_ROOT, 'Outputs', 'proposals', fileName);
+        
+        if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+            const content = fs.readFileSync(filePath, 'utf8');
+            res.writeHead(200, {
+                'Content-Type': 'text/markdown; charset=utf-8',
+                'Access-Control-Allow-Origin': '*'
+            });
+            res.end(content);
+        } else {
+            res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+            res.end('Proposal not found');
+        }
+        return;
+    }
+
     // API 3: クラウド監視ステータス (ロック、エラーカウンター、サーキットブレーカー)
     if (req.url === '/api/watcher-status' && req.method === 'GET') {
         const lockPath = path.join(WORKSPACE_ROOT, '.workflow_lock');
