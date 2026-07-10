@@ -446,9 +446,10 @@ def main():
 
     # 6. バグ修正：法務監査役（Compliance）によるAIガチ監査の統合
     print("\n--- コンプライアンス監査役によるファクトチェック ＆ 修正中 ---")
-    auditor_prompt = (
-        "あなたはTandy.incの法務監査・コンプライアンス監査役です。あなたの役割定義（system_instruoregroundColor,fontSize,bold'
-                    }
+  auditor_prompt = {
+    "role": "system",
+    "content": "あなたはTandy.incの法務監査・コンプライアンス監査役です。あなたの役割定義（system_instruction）"
+}
                 })
             elif action == 'HEADING_3':
                 style_requests.append({
