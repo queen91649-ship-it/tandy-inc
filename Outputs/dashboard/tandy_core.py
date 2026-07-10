@@ -365,19 +365,52 @@ class TandyDriveClient:
             print(f"古いアーカイブのクリーンアップに失敗しました: {e}")
 
 
+def read_file_with_local_fallback(drive_client, relative_path, default_content=None):
+    """
+    Google Drive API を介してファイルを読み込むことを試み、
+    見つからない場合はローカルリポジトリ内の同パスのファイルから読み込むフォールバック処理を行います。
+    """
+    try:
+        file_id = drive_client.find_file_id_by_path(relative_path)
+        if file_id:
+            content = drive_client.read_file_content(file_id)
+            print(f"Drive から読み込み成功: {relative_path}")
+            return content
+    except Exception as e:
+        print(f"Drive からの読み込み中にエラーが発生しました ({relative_path}): {e}。ローカルからの読み込みを試みます。")
+
+    # ローカルからの読み込み
+    try:
+        local_path = relative_path.replace("/", os.sep)
+        # Windowsの絶対パスに展開するためのローカルパス解決
+        # 親ディレクトリなどが存在するか確認して安全に開く
+        if os.path.exists(local_path):
+            with open(local_path, "r", encoding="utf-8") as f:
+                content = f.read()
+            print(f"ローカルから読み込み成功: {local_path}")
+            return content
+    except Exception as e:
+        print(f"ローカルからの読み込みにも失敗しました ({relative_path}): {e}")
+
+    return default_content
+
+
 def fetch_rss_feeds_by_category(category_name, drive_client):
     """
     指定されたカテゴリー（分野名）に対応するRSSフィードを 02_情報リサーチ/rss_feeds.txt から読み込み、
     最新記事をパースして文字列として返します。
     """
     try:
-        # 1. rss_feeds.txt のファイルIDを取得して中身を読み込む
-        rss_feeds_id = drive_client.find_file_id_by_path("02_情報リサーチ/rss_feeds.txt")
-        if not rss_feeds_id:
-            print(f"警告: 02_情報リサーチ/rss_feeds.txt が見つかりません。RSSリサーチをスキップします。")
+        # ローカル・フォールバック付きで rss_feeds.txt を読み込む
+        rss_content = read_file_with_local_fallback(
+            drive_client, 
+            "02_情報リサーチ/rss_feeds.txt", 
+            default_content=""
+        )
+        if not rss_content:
+            print(f"警告: rss_feeds.txt の中身が空か存在しません。RSSリサーチをスキップします。")
             return "直近で取得可能なRSS記事はありませんでした。"
         
-        rss_content = drive_client.read_file_content(rss_feeds_id)
         urls = []
         for line in rss_content.splitlines():
             line = line.strip()
@@ -505,10 +538,9 @@ def main():
 
     # watchlist.txt 読み込み
     print("watchlist.txt を読み込み中...")
-    watchlist_id = drive.find_file_id_by_path("02_情報リサーチ/watchlist.txt")
-    if not watchlist_id:
+    watchlist_content = read_file_with_local_fallback(drive, "02_情報リサーチ/watchlist.txt")
+    if not watchlist_content:
         raise FileNotFoundError("02_情報リサーチ/watchlist.txt が見つかりません。")
-    watchlist_content = drive.read_file_content(watchlist_id)
     print("watchlist.txt 読み込み完了。")
 
     # 記者・編集長・監査役の定義ファイル読み込み
@@ -524,19 +556,31 @@ def main():
     }
     reporter_instructions = {}
     for name, path in reporters.items():
-        fid = drive.find_file_id_by_path(path)
-        reporter_instructions[name] = drive.read_file_content(fid) if fid else f"あなたは{name}担当の記者です。"
+        reporter_instructions[name] = read_file_with_local_fallback(
+            drive, 
+            path, 
+            default_content=f"あなたは{name}担当の記者です。"
+        )
         print(f"{name} 記者定義ファイル読み込み完了。")
 
-    editor_id = drive.find_file_id_by_path("08_出版事業部/editor_agent.md")
-    editor_instruction = drive.read_file_content(editor_id) if editor_id else "あなたは総合編集長です。"
+    editor_instruction = read_file_with_local_fallback(
+        drive, 
+        "08_出版事業部/editor_agent.md", 
+        default_content="あなたは総合編集長です。"
+    )
 
-    auditor_id = drive.find_file_id_by_path("05_法務監査/auditor_agent.md")
-    auditor_instruction = drive.read_file_content(auditor_id) if auditor_id else "あなたはコンプライアンス監査役です。"
+    auditor_instruction = read_file_with_local_fallback(
+        drive, 
+        "05_法務監査/auditor_agent.md", 
+        default_content="あなたはコンプライアンス監査役です。"
+    )
 
     # リサーチ部門の指示書読み込み
-    research_id = drive.find_file_id_by_path("02_情報リサーチ/research_agent.md")
-    research_instruction = drive.read_file_content(research_id) if research_id else "あなたは優秀なリサーチ・エージェントです。"
+    research_instruction = read_file_with_local_fallback(
+        drive, 
+        "02_情報リサーチ/research_agent.md", 
+        default_content="あなたは優秀なリサーチ・エージェントです。"
+    )
     print("research_agent.md 読み込み完了。")
 
     # 8名の記者による執筆 (リサーチエージェントとのバトンリレー構造)
