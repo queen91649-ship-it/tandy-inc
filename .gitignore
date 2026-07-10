@@ -1,0 +1,12 @@
+# Ignore Windows folder settings
+desktop.ini
+**/desktop.ini
+*/desktop.ini
+
+# Ignore system files
+.DS_Store
+Thumbs.db
+
+# Ignore node modules
+node_modules/
+**/node_modules/
