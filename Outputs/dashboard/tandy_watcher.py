@@ -307,7 +307,7 @@ def main():
         print("処理対象の新規ファイルはありません。正常終了します。")
         sys.exit(0)
 
-    if args.dry-run:
+    if args.dry_run:
         print("\n--- DRY-RUN MODE ---")
         print("検出された処理対象ファイル:")
         for tf in target_files:
