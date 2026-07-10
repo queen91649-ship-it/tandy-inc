@@ -265,52 +265,22 @@ def main():
     args = parser.parse_args()
 
     if not ROOT_FOLDER_ID or not GEMINI_API_KEY:
-        print(f"エラー: 必要な環境変数が設定されていません。")
-        print(f"  GOOGLE_DRIVE_ROOT_FOLDER_ID: {'設定あり' if ROOT_FOLDER_ID else '未設定'}")
-        print(f"  GEMINI_API_KEY: {'設定あり' if GEMINI_API_KEY else '未設定'}")
+        print("エラー: 必要な環境変数が設定されていません。")
         sys.exit(1)
 
     print("Google Drive API に接続中...")
-    try:
-        drive = TandyWatcherDriveClient()
-    except Exception as e:
-        print(f"エラー: Google Driveへの接続に失敗しました: {e}")
-        traceback.print_exc()
-        sys.exit(1)
+    drive = TandyWatcherDriveClient()
     
     # 1. 各フォルダのIDを取得
-    folders = {
-        "Inbox": "Inbox",
-        "Archive": "Archive",
-        "Outputs": "Outputs",
-        "04_運営総務": "04_運営総務",
-        "Pending_Approval": "Pending_Approval"
-    }
-    folder_ids = {}
-    missing_folders = []
-    
-    for name, path in folders.items():
-        try:
-            fid = drive.get_folder_id_by_path(path)
-            if fid:
-                folder_ids[name] = fid
-            else:
-                missing_folders.append(name)
-        except Exception as e:
-            print(f"警告: フォルダ '{name}' ({path}) の取得中に例外が発生しました: {e}")
-            missing_folders.append(name)
-            
-    if missing_folders:
-        print(f"エラー: 以下の必要なフォルダ構造が見つかりません。サービスアカウントへの共有設定やフォルダの存在を確認してください。")
-        for f in missing_folders:
-            print(f"  - {f}")
+    inbox_id = drive.get_folder_id_by_path("Inbox")
+    archive_id = drive.get_folder_id_by_path("Archive")
+    outputs_id = drive.get_folder_id_by_path("Outputs")
+    ops_folder_id = drive.get_folder_id_by_path("04_運営総務")
+    pending_approval_id = drive.get_folder_id_by_path("Pending_Approval")
+
+    if not inbox_id or not archive_id or not outputs_id or not ops_folder_id:
+        print("エラー: 必要なフォルダ構造が見つかりません。")
         sys.exit(1)
-        
-    inbox_id = folder_ids["Inbox"]
-    archive_id = folder_ids["Archive"]
-    outputs_id = folder_ids["Outputs"]
-    ops_folder_id = folder_ids["04_運営総務"]
-    pending_approval_id = folder_ids["Pending_Approval"]
 
     # 2. 安全確認（サーキットブレーカー ＆ ロック）
     error_data, counter_id = get_error_data(drive, ops_folder_id)

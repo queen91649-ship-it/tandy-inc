@@ -165,18 +165,11 @@ def clean_inbox(drive):
 
 def main():
     if not ROOT_FOLDER_ID or not GEMINI_API_KEY:
-        print(f"エラー: 必要な環境変数が設定されていません。")
-        print(f"  GOOGLE_DRIVE_ROOT_FOLDER_ID: {'設定あり' if ROOT_FOLDER_ID else '未設定'}")
-        print(f"  GEMINI_API_KEY: {'設定あり' if GEMINI_API_KEY else '未設定'}")
+        print("エラー: 必要な環境変数が設定されていません。")
         sys.exit(1)
 
     print("Google Drive API に接続中...")
-    try:
-        drive = TandyWatcherDriveClient()
-    except Exception as e:
-        print(f"エラー: Google Driveへの接続に失敗しました: {e}")
-        traceback.print_exc()
-        sys.exit(1)
+    drive = TandyWatcherDriveClient()
     
     # ロックファイルチェック
     lock_id = drive.find_file_id_by_path(".workflow_lock", parent_id=drive.root_id)
