@@ -286,6 +286,24 @@ class TandyDriveClient:
         ]
         self.docs_service.documents().batchUpdate(documentId=document_id, body={'requests': replace_requests}).execute()
 
+    def list_files(self, folder_id):
+        """指定したフォルダ内のファイル一覧を取得する (mimeType, modifiedTime, size を含む)"""
+        query = f"'{folder_id}' in parents and trashed = false"
+        results = self.service.files().list(
+            q=query, 
+            fields='files(id, name, mimeType, modifiedTime, size)'
+        ).execute()
+        return results.get('files', [])
+
+    def rename_file(self, file_id, new_name):
+        """ファイル名をリネームする"""
+        file_metadata = {'name': new_name}
+        return self.service.files().update(
+            fileId=file_id, 
+            body=file_metadata, 
+            fields='id, name'
+        ).execute()
+
     def empty_trash_and_show_quota(self):
         """
         サービスアカウントのストレージ容量（クォータ）を表示し、
