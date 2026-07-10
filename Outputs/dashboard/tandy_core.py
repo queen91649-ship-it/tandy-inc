@@ -424,16 +424,51 @@ def main():
     auditor_id = drive.find_file_id_by_path("05_法務監査/auditor_agent.md")
     auditor_instruction = drive.read_file_content(auditor_id) if auditor_id else "あなたはコンプライアンス監査役です。"
 
-    # 8名の記者による執筆
+    # リサーチ部門の指示書読み込み
+    research_id = drive.find_file_id_by_path("02_情報リサーチ/research_agent.md")
+    research_instruction = drive.read_file_content(research_id) if research_id else "あなたは優秀なリサーチ・エージェントです。"
+    print("research_agent.md 読み込み完了。")
+
+    # 8名の記者による執筆 (リサーチエージェントとのバトンリレー構造)
     articles = {}
-    print("\n--- 8名の記者が執筆を開始します ---")
+    print("\n--- ニュースレター作成プロセス（リサーチ ➔ 執筆 のバトンリレー）を開始します ---")
     for name, instruction in reporter_instructions.items():
-        print(f"{name} 記者 執筆中...")
-        prompt = (
-            f"本日の日付は {today_str} です。"
-            "あなたの役割定義に従い、直近24時間における重要トピックを必ず3件以上選定し、"
-            "詳細に執筆してください。各トピックには個別に 'Tandy's Insight' を記述してください。"
-            "Google Searchで最新情報を収集してから執筆してください。"
+        print(f"\n[{name} 分野] リサーチエージェントがファクト調査中...")
+        research_prompt = (
+            f"本日の日付は {today_str} です。\n"
+            f"【最優先リサーチ対象キーワード】:\n{watchlist_content}\n"
+            f"担当分野: {name}\n"
+            "あなたの役割定義に従い、この分野および最優先キーワードに関する直近24時間の重要ニュースや事実データを、"
+            "Google Searchを用いて徹底的に調査し、客観的な事実と情報ソースURL（Sources）のみを詳細にまとめた『リサーチレポート』を作成してください。"
+            "推測やハルシネーション（事実の捏造）は一切含めないでください。"
+            "【重要規約】: レポート内において、絵文字やシンボルマーク（✅や🚀など）は一切使用しないでください。"
+        )
+        
+        research_report = ""
+        try:
+            research_response = gemini_client.models.generate_content(
+                model='gemini-2.5-pro',
+                contents=research_prompt,
+                config=types.GenerateContentConfig(
+                    system_instruction=research_instruction,
+                    temperature=0.2,  # ファクト調査のため低めのTemperatureで堅実に
+                    tools=[{"google_search": {}}]
+                ),
+            )
+            research_report = clean_emoji_and_symbols(research_response.text)
+            print(f"[{name} 分野] リサーチレポート作成完了。")
+        except Exception as ex:
+            research_report = f"【エラー】リサーチ中にエラーが発生しました: {ex}"
+            print(f"[{name} 分野] リサーチエラー: {ex}")
+
+        print(f"[{name} 分野] 記者が執筆中...")
+        reporter_prompt = (
+            f"本日の日付は {today_str} です。\n"
+            f"【最優先リサーチ対象キーワード】:\n{watchlist_content}\n\n"
+            f"【リサーチ部門からの確定事実レポート】:\n{research_report}\n\n"
+            "上記の確定事実レポートおよび最優先キーワードに基づき、あなたの役割定義に従って、"
+            "詳細に記事を執筆してください。各トピックには個別に 'Tandy's Insight' を記述してください。"
+            "必ずレポートに記載されている事実に基づき、ハルシネーション（事実の捏造）を決して行わないでください。"
             "【重要規約】: 本文および見出しにおいて、絵文字やシンボルマーク（✅や🚀など）は一切使用しないでください。"
             "また、毎朝読むCEOが今日一日前向きで知的なエネルギーに満ちあふれるよう、"
             "客観的かつ建設的で、自己肯定感の高まる高尚な文体で論述してください。"
@@ -441,18 +476,17 @@ def main():
         try:
             response = gemini_client.models.generate_content(
                 model='gemini-2.5-pro',
-                contents=prompt,
+                contents=reporter_prompt,
                 config=types.GenerateContentConfig(
                     system_instruction=instruction,
-                    temperature=0.7,
-                    tools=[{"google_search": {}}]
+                    temperature=0.7,  # 表現を豊かにするため執筆は高めのTemperature
                 ),
             )
             articles[name] = clean_emoji_and_symbols(response.text)
-            print(f"{name} 記者 執筆完了。")
+            print(f"[{name} 分野] 記者 執筆完了。")
         except Exception as ex:
             articles[name] = f"【エラー】{name}記者の執筆中にエラーが発生しました: {ex}"
-            print(f"{name} 記者 エラー: {ex}")
+            print(f"[{name} 分野] 記者 執筆エラー: {ex}")
 
     # 編集長によるパッケージング
     print("\n--- 編集長がパッケージング中 ---")
@@ -488,19 +522,21 @@ def main():
         except Exception as ex:
             link_report += f"* {url} : 警告 - アクセス失敗 ({ex})\n"
 
-    # Compliance監査 (絵文字排除 ＆ 2026年日付 of 厳密化)
+    # Compliance監査 (絵文字排除 ＆ 2026年日付 of 厳密化 ＆ ガチ監査)
     print("\n--- Compliance監査中 ---")
-    compliance_prompt = (
-        f"編集長から朝刊ドラフトが届きました。\n【朝刊ドラフト】{draft}\n"
-        f"本日の正確な日付は {today_str}（2026年）です。この日付を絶対的な基準として、記述されている各ニュースのファクトや年（2024年などの過去ニュースの混入）にハルシネーションがないかを検証してください。\n"
-        f"また、以下のURL検証ログと合わせて監査レポートを作成してください。\n"
-        f"【URLログ】{link_report}\n"
-        "最後に朝刊ドラフトの末尾に監査レポートをドッキングした最終版を書き出してください。\n"
-        "【重要規約】: 絵文字は一切使用しないでください。"
+    auditor_prompt = (
+        "あなたはTandy.incの法務監査・コンプライアンス監査役です。\n"
+        f"本日の正確な日付は {today_str}（2026年）です。この日付を絶対的な基準として、以下の朝刊（初稿）の内容に、事実誤認や不確かな情報（ハルシネーション）がないか、"
+        "また過去のニュースの混入がないかを、あなたの監査基準に従って厳格にチェックし、必要であれば修正した最終稿を出力してください。\n"
+        f"また、以下のURL検証ログを監査し、リンク切れなどの警告があれば、必要に応じて修正または注記を追加してください。\n"
+        f"【URL検証ログ】:\n{link_report}\n\n"
+        f"【朝刊初稿】:\n{draft}\n\n"
+        "最後に、朝刊ドラフトの末尾にあなたの監査レポートをドッキングした最終版を出力してください。\n"
+        "【重要規約】: 本文および見出し、監査レポートを含め、絵文字やシンボルマークは一切使用しないでください。"
     )
     final = gemini_client.models.generate_content(
-        model='gemini-2.5-pro', contents=compliance_prompt,
-        config=types.GenerateContentConfig(system_instruction=auditor_instruction, temperature=0.7)
+        model='gemini-2.5-pro', contents=auditor_prompt,
+        config=types.GenerateContentConfig(system_instruction=auditor_instruction, temperature=0.2)
     ).text
     final = clean_emoji_and_symbols(final)
     print("Compliance監査完了。")

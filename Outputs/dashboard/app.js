@@ -154,7 +154,7 @@ async function scanInbox() {
                 label = 'CEO指示';
             }
             
-            li.innerHTML = `<span>📄 ${file.name}</span><span class="status-badge" style="background-color:${badgeBg};color:${badgeColor};">${label}</span>`;
+            li.innerHTML = `<span>${file.name}</span><span class="status-badge" style="background-color:${badgeBg};color:${badgeColor};">${label}</span>`;
             listElement.appendChild(li);
         });
     } catch (error) {
@@ -183,7 +183,7 @@ async function scanPendingApproval() {
             li.style.borderLeftColor = '#f59e0b';
             li.style.cursor = 'pointer';
             
-            const icon = file.type === 'directory' ? '📁' : '📄';
+            const icon = file.type === 'directory' ? '[フォルダ]' : '[ファイル]';
             li.innerHTML = `<span>${icon} ${file.name}</span><span class="status-badge" style="background-color:rgba(245, 158, 11, 0.15);color:#f59e0b;">承認待ち</span>`;
             
             // クリック時に監査プレビューを開く
@@ -205,7 +205,7 @@ async function viewPendingDetail(name) {
     const contentElement = document.getElementById('pending-detail-content');
     const actionArea = document.getElementById('pending-action-area');
     
-    titleElement.textContent = `🔍 成果物監査: ${name}`;
+    titleElement.textContent = `成果物監査: ${name}`;
     contentElement.innerHTML = '<p class="preview-placeholder">成果物のテキストデータを読み込んでいます...</p>';
     if (actionArea) actionArea.style.display = 'none';
     
@@ -318,7 +318,7 @@ async function loadSchedules() {
             }
 
             tr.innerHTML = `
-                <td style="padding: 14px 10px; font-weight: 600; color: #f3f4f6;">⏱️ ${s.name}</td>
+                <td style="padding: 14px 10px; font-weight: 600; color: #f3f4f6;">${s.name}</td>
                 <td style="padding: 14px 10px;">
                     <span class="status-badge" style="background-color: rgba(157, 0, 255, 0.12); color: #9d00ff; font-weight: 600;">${s.scheduleJST}</span>
                     <span class="status-badge sched-cron" style="margin-left: 8px;">${s.cron}</span>
@@ -397,7 +397,7 @@ async function loadProposals() {
                 }
             }
             
-            li.innerHTML = `<span>💡 ${p.name}</span><span class="${badgeClass}">${labelStr}</span>`;
+            li.innerHTML = `<span>${p.name}</span><span class="${badgeClass}">${labelStr}</span>`;
             
             li.onclick = () => {
                 currentSelectedProposal = p.name;
@@ -958,7 +958,7 @@ function simulateWorkflowRun(mode) {
         previewArea.innerHTML = `
             <div style="font-family: 'Inter'; font-size:14px; line-height:1.6;">
                 <h3 style="color:#00f0ff;font-family:'Outfit';margin-bottom:12px;display:flex;align-items:center;gap:8px;">
-                    🎉 成果物の生成に成功しました
+                    成果物の生成に成功しました
                 </h3>
                 <p style="margin-bottom:14px;color:#9ca3af;font-size:12px;">実行されたモード: ${modeName}</p>
                 <div style="background-color:rgba(255,255,255,0.03);padding:16px;border-radius:10px;border:1px solid rgba(255,255,255,0.06);margin-bottom:12px;">
