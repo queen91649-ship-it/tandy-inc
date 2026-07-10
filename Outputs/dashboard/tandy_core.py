@@ -83,12 +83,6 @@ class TandyDriveClient:
         return fh.getvalue().decode('utf-8')
 
     def archive_and_update_newsletter(self, folder_id, content):
-        """
-        前回の 'latest_newsletter' の複製コピーはサービスアカウントの容量制限（上限0バイト）を回避するため行わず、
-        代わりにローカルの Outputs/newsletters/ 内にMarkdownとしてアーカイブを出力し、
-        Google Docs（latest_newsletter）はDocs APIで上書き更新する。
-        """
-        # 1. 既存の latest_newsletter を検索
         query = f"'{folder_id}' in parents and name contains 'latest_newsletter' and trashed = false"
         results = self.service.files().list(q=query, fields='files(id, name)').execute()
         files = results.get('files', [])
@@ -98,7 +92,6 @@ class TandyDriveClient:
 
         latest_id = files[0]['id']
         
-        # 2. ローカルに日付付きMarkdownでアーカイブを保存（GitHub Actionsがこれをコミットして履歴保存する - 日本時間基準）
         jst = datetime.timezone(datetime.timedelta(hours=9))
         archive_name = f"{datetime.datetime.now(jst).strftime('%Y%m%d')}_newsletter.md"
         local_dir = "Outputs/newsletters"
@@ -108,15 +101,11 @@ class TandyDriveClient:
             f.write(content)
         print(f"ローカルアーカイブにニュースレターを保存しました: {local_path}")
 
-        # 3. Google Docs API を用いた本番上書き ＆ 自己肯定感が上がる美麗フォーマットの適用
         print("最新ニュースレターを上書き更新 ＆ 知的フォーマット整形中...")
         self.write_and_format_google_doc(latest_id, content)
         return latest_id
 
     def write_and_format_google_doc(self, document_id, markdown_text):
-        """
-        Google Docs API を使用して、Markdownテキストを美しい段落・見出し・装飾付きドキュメントに変換して上書きする。
-        """
         doc = self.docs_service.documents().get(documentId=document_id).execute()
         end_index = doc.get('body').get('content')[-1].get('endIndex')
         
@@ -303,6 +292,247 @@ class TandyDriveClient:
             body=file_metadata, 
             fields='id, name'
         ).execute()
+
+    def empty_trash_and_show_quota(self):
+        print("\n--- サービスアカウント ストレージ確認 ＆ ゴミ箱クリア ---")
+        try:
+            about = self.service.about().get(fields="storageQuota").execute()
+            quota = about.get('storageQuota', {})
+            limit = int(quota.get('limit', 0)) / (1024**3) if 'limit' in quota else 0
+            usage = int(quota.get('usage', 0)) / (1024**3) if 'usage' in quota else 0
+            print(f"ストレージ使用状況: {usage:.4f} GB / 上限: {limit:.4f} GB")
+        except Exception as e:
+            print(f"ストレージ情報の取得に失敗しました: {e}")
+
+        try:
+            print("ゴミ箱を空にしています...")
+            self.service.files().emptyTrash().execute()
+            print("ゴミ箱のクリアが完了しました。")
+            about = self.service.about().get(fields="storageQuota").execute()
+            quota = about.get('storageQuota', {})
+            usage = int(quota.get('usage', 0)) / (1024**3) if 'usage' in quota else 0
+            print(f"クリア後のストレージ使用状況: {usage:.4f} GB")
+        except Exception as e:
+            print(f"ゴミ箱のクリアに失敗しました: {e}")
+
+    def cleanup_old_archives(self, folder_id, keep_days=30):
+        print(f"\n--- 古いアーカイブのクリーンアップ (過去 {keep_days} 日分を保持) ---")
+        try:
+            query = f"'{folder_id}' in parents and name contains '_newsletter' and trashed = false"
+            results = self.service.files().list(q=query, orderBy="name desc", fields='files(id, name, createdTime)').execute()
+            files = results.get('files', [])
+            
+            archive_files = []
+            for f in files:
+                if re.match(r'^\d{8}_newsletter', f['name']):
+                    archive_files.append(f)
+            
+            print(f"見つかったアーカイブ数: {len(archive_files)} 件")
+            if len(archive_files) > keep_days:
+                to_delete = archive_files[keep_days:]
+                print(f"保持上限 ({keep_days} 件) を超えたため、{len(to_delete)} 件の古いファイルを削除します。")
+                for f in to_delete:
+                    print(f"削除中: {f['name']} (ID: {f['id']})")
+                    self.service.files().delete(fileId=f['id']).execute()
+                print("古いアーカイブの削除が完了しました。")
+            else:
+                print("削除対象の古いアーカイブはありません。")
+        except Exception as e:
+            print(f"古いアーカイブのクリーンアップに失敗しました: {e}")
+
+
+def clean_emoji_and_symbols(text):
+    emoji_pattern = re.compile(
+        r'[\u2600-\u27BF]|[\uE000-\uF8FF]|\uD83C[\uDF00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD10-\uDDFF]',
+        flags=re.UNICODE
+    )
+    return emoji_pattern.sub('', text)
+
+def main():
+    if not ROOT_FOLDER_ID or not GEMINI_API_KEY:
+        print("エラー: 必要な環境変数が設定されていません。")
+        sys.exit(1)
+
+    drive = TandyDriveClient()
+    drive.empty_trash_and_show_quota()
+    
+    gemini_client = genai.Client(api_key=GEMINI_API_KEY)
+    
+    jst = datetime.timezone(datetime.timedelta(hours=9))
+    today_str = datetime.datetime.now(jst).strftime("%Y年%m月%d日")
+
+    # 1. watchlist.txt の確実な読み込み
+    print("watchlist.txt を読み込み中...")
+    watchlist_id = drive.find_file_id_by_path("02_情報リサーチ/watchlist.txt")
+    if not watchlist_id:
+        raise FileNotFoundError("02_情報リサーチ/watchlist.txt が見つかりません。")
+    watchlist_content = drive.read_file_content(watchlist_id)
+    print("watchlist.txt 読み込み完了。")
+
+    # 2. 定義ファイルの読み込み
+    reporters = {
+        "japan":       "08_出版事業部/専属記者/reporter_japan.md",
+        "global":      "08_出版事業部/専属記者/reporter_global.md",
+        "ai":          "08_出版事業部/専属記者/reporter_ai.md",
+        "infra":       "08_出版事業部/専属記者/reporter_infra.md",
+        "spurs":       "08_出版事業部/専属記者/reporter_spurs.md",
+        "premier":     "08_出版事業部/専属記者/reporter_premier.md",
+        "europe":      "08_出版事業部/専属記者/reporter_europe.md",
+        "serendipity": "08_出版事業部/専属記者/reporter_serendipity.md"
+    }
+    reporter_instructions = {}
+    for name, path in reporters.items():
+        fid = drive.find_file_id_by_path(path)
+        reporter_instructions[name] = drive.read_file_content(fid) if fid else f"あなたは{name}担当の記者です。"
+        print(f"{name} 記者定義ファイル読み込み完了。")
+
+    editor_id = drive.find_file_id_by_path("08_出版事業部/editor_agent.md")
+    editor_instruction = drive.read_file_content(editor_id) if editor_id else "あなたは総合編集長です。"
+
+    auditor_id = drive.find_file_id_by_path("05_法務監査/auditor_agent.md")
+    auditor_instruction = drive.read_file_content(auditor_id) if auditor_id else "あなたはコンプライアンス監査役です。"
+
+    # 3. 8名の記者による執筆（CEO指示書「watchlist」をインプットに注入）
+    articles = {}
+    print("\n--- 8名の記者が執筆を開始します ---")
+    for name, instruction in reporter_instructions.items():
+        print(f"{name} 記者 執筆中...")
+        prompt = (
+            f"本日の日付は {today_str} です。\n\n"
+            f"【最優先リサーチ・執筆対象（CEO関心キーワード）】:\n{watchlist_content}\n\n" # ←バグ修正：指示書を確実に注入
+            "あなたの役割定義（system_instruction）に従い、上記キーワードおよび担当領域に関連する直近24時間の重要トピックを必ず3件以上選定し、"
+            "詳細に執筆してください。各トピックには個別に 'Tandy's Insight' を記述してください。"
+            "Google Searchで最新情報を収集してから執筆してください。"
+            "【重要規約】: 本文および見出しにおいて、絵文字やシンボルマーク（✅や🚀など）は一切使用しないでください。"
+            "また、毎朝読むCEOが今日一日前向きで知的なエネルギーに満ちあふれるよう、"
+            "客観的かつ建設的で、自己肯定感の高まる高尚な文体で論述してください。"
+        )
+        try:
+            response = gemini_client.models.generate_content(
+                model='gemini-2.5-pro',
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    system_instruction=instruction,
+                    temperature=0.7,
+                    tools=[{"google_search": {}}]
+                ),
+            )
+            articles[name] = clean_emoji_and_symbols(response.text)
+            print(f"{name} 記者 執筆完了。")
+        except Exception as ex:
+            articles[name] = f"【エラー】{name}記者の執筆中にエラーが発生しました: {ex}"
+            print(f"{name} 記者 エラー: {ex}")
+
+    # 4. 編集長によるパッケージング（初稿作成）
+    print("\n--- 編集長がパッケージング中 ---")
+    editor_prompt = (
+        f"本日の日付は {today_str} です。8名の記者から以下の原稿が届きました。\n\n"
+        f"【国内政治・経済】\n{articles.get('japan','')}\n\n"
+        f"【国際情勢・世界経済】\n{articles.get('global','')}\n\n"
+        f"【AI・テクノロジー】\n{articles.get('ai','')}\n\n"
+        f"【通信インフラ】\n{articles.get('infra','')}\n\n"
+        f"【トッテナム・Spurs】\n{articles.get('spurs','')}\n\n"
+        f"【プレミアリーグ】\n{articles.get('premier','')}\n\n"
+        f"【欧州リーグ】\n{articles.get('europe','')}\n\n"
+        f"【宇宙・深海・科学】\n{articles.get('serendipity','')}\n\n"
+        "全体のトーンを統一し、表紙（ヘッドラインリード・目次）と編集長社説を追加して、"
+        "美しいMarkdown形式の朝刊（Tandy Times）を完成させてください。"
+        "【重要規約】: 絵文字や装飾記号は一切使用しないでください。"
+        "知的な高揚感と、読者（CEO）のモチベーション・自己肯定感を大きく高める社説と見出しを構成してください。"
+    )
+    draft = gemini_client.models.generate_content(
+        model='gemini-2.5-pro', contents=editor_prompt,
+        config=types.GenerateContentConfig(system_instruction=editor_instruction, temperature=0.7)
+    ).text
+    draft = clean_emoji_and_symbols(draft)
+    print("編集長パッケージング完了。")
+
+    # 5. システムによるURL生存チェック（プログラム監査）
+    print("\n--- 掲載URLの生存チェックを実行中 ---")
+    link_report = "### 生存リンクチェックログ\n"
+    urls = set(re.findall(r'https?://[^\s)\]"\']+', draft))
+    for url in urls:
+        url = url.rstrip('.,;*')
+        try:
+            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+            with urllib.request.urlopen(req, timeout=5) as response:
+                status = response.getcode()
+                link_report += f"- ✅ {url} (Status: {status})\n"
+        except Exception as e:
+            link_report += f"- ❌ {url} (Error: {e})\n"
+    print("URL生存チェック完了。")
+
+    # 6. バグ修正：法務監査役（Compliance）によるAIガチ監査の統合
+    print("\n--- コンプライアンス監査役によるファクトチェック ＆ 修正中 ---")
+  auditor_prompt = {
+    "role": "system",
+    "content": "あなたはTandy.incの法務監査・コンプライアンス監査役です。あなたの役割定義（system_instruction）"
+}
+                })
+            elif action == 'HEADING_3':
+                style_requests.append({
+                    'updateParagraphStyle': {
+                        'range': {'startIndex': start, 'endIndex': end},
+                        'paragraphStyle': {'namedStyleType': 'HEADING_2'},
+                        'fields': 'namedStyleType'
+                    }
+                })
+                style_requests.append({
+                    'updateTextStyle': {
+                        'range': {'startIndex': start, 'endIndex': end - 1},
+                        'textStyle': {
+                            'foregroundColor': {'color': {'rgbColor': {'blue': 0.3, 'green': 0.3, 'red': 0.3}}},
+                            'fontSize': {'magnitude': 12, 'unit': 'PT'},
+                            'bold': True
+                        },
+                        'fields': 'foregroundColor,fontSize,bold'
+                    }
+                })
+            elif action == 'INSIGHT_HIGHLIGHT':
+                style_requests.append({
+                    'updateTextStyle': {
+                        'range': {'startIndex': start, 'endIndex': end},
+                        'textStyle': {
+                            'foregroundColor': {'color': {'rgbColor': {'blue': 0.5, 'green': 0.1, 'red': 0.1}}},
+                            'bold': True
+                        },
+                        'fields': 'foregroundColor,bold'
+                    }
+                })
+            elif action == 'BOLD_TEXT':
+                style_requests.append({
+                    'updateTextStyle': {
+                        'range': {'startIndex': start, 'endIndex': end},
+                        'textStyle': {'bold': True},
+                        'fields': 'bold'
+                    }
+                })
+            elif action == 'DIVIDER':
+                style_requests.append({
+                    'updateTextStyle': {
+                        'range': {'startIndex': start, 'endIndex': end},
+                        'textStyle': {
+                            'foregroundColor': {'color': {'rgbColor': {'blue': 0.8, 'green': 0.8, 'red': 0.8}}}
+                        },
+                        'fields': 'foregroundColor'
+                    }
+                })
+
+        if style_requests:
+            try:
+                self.docs_service.documents().batchUpdate(documentId=document_id, body={'requests': style_requests}).execute()
+            except Exception as ex:
+                print(f"書式適用で一部スキップが発生しました: {ex}")
+
+        replace_requests = [
+            {
+                'replaceAllText': {
+                    'containsText': {'matchCase': True, 'text': '**'},
+                    'replaceText': ''
+                }
+            }
+        ]
+        self.docs_service.documents().batchUpdate(documentId=document_id, body={'requests': replace_requests}).execute()
 
     def empty_trash_and_show_quota(self):
         """
