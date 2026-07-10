@@ -4,6 +4,7 @@ import datetime
 import traceback
 import urllib.request
 import re
+import xml.etree.ElementTree as ET
 
 try:
     from google.auth import default
@@ -364,6 +365,115 @@ class TandyDriveClient:
             print(f"古いアーカイブのクリーンアップに失敗しました: {e}")
 
 
+def fetch_rss_feeds_by_category(category_name, drive_client):
+    """
+    指定されたカテゴリー（分野名）に対応するRSSフィードを 02_情報リサーチ/rss_feeds.txt から読み込み、
+    最新記事をパースして文字列として返します。
+    """
+    try:
+        # 1. rss_feeds.txt のファイルIDを取得して中身を読み込む
+        rss_feeds_id = drive_client.find_file_id_by_path("02_情報リサーチ/rss_feeds.txt")
+        if not rss_feeds_id:
+            print(f"警告: 02_情報リサーチ/rss_feeds.txt が見つかりません。RSSリサーチをスキップします。")
+            return "直近で取得可能なRSS記事はありませんでした。"
+        
+        rss_content = drive_client.read_file_content(rss_feeds_id)
+        urls = []
+        for line in rss_content.splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if "=" in line:
+                cat, url = line.split("=", 1)
+                if cat.strip() == category_name:
+                    urls.append(url.strip())
+                    
+        if not urls:
+            print(f"[{category_name}] カテゴリーに対応するRSSフィードURLが定義されていません。")
+            return "直近で取得可能なRSS記事はありませんでした。"
+            
+        print(f"[{category_name}] RSSフィードから収集を開始します: {len(urls)} 件")
+        
+        articles = []
+        for url in urls:
+            try:
+                req = urllib.request.Request(
+                    url, 
+                    headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+                )
+                with urllib.request.urlopen(req, timeout=10) as response:
+                    xml_data = response.read()
+                    
+                root = ET.fromstring(xml_data)
+                
+                # RSS 2.0 (channel -> item) のパース
+                channel = root.find('channel')
+                if channel is not None:
+                    for item in channel.findall('item'):
+                        title = item.findtext('title', '').strip()
+                        link = item.findtext('link', '').strip()
+                        desc = item.findtext('description', '').strip()
+                        pub_date = item.findtext('pubDate', '').strip()
+                        
+                        desc = re.sub(r'<[^>]*>', '', desc)
+                        if len(desc) > 200:
+                            desc = desc[:200] + "..."
+                            
+                        articles.append({
+                            'title': title,
+                            'link': link,
+                            'description': desc,
+                            'pubDate': pub_date
+                        })
+                else:
+                    # Atom (feed -> entry) のパース
+                    entries = root.findall('.//{http://www.w3.org/2005/Atom}entry')
+                    if not entries:
+                        entries = root.findall('.//entry')
+                        
+                    for entry in entries:
+                        title_elem = entry.find('{http://www.w3.org/2005/Atom}title') or entry.find('title')
+                        title = title_elem.text.strip() if title_elem is not None else ""
+                        
+                        link_elem = entry.find('{http://www.w3.org/2005/Atom}link') or entry.find('link')
+                        link = ""
+                        if link_elem is not None:
+                            link = link_elem.attrib.get('href', '').strip()
+                            
+                        summary_elem = entry.find('{http://www.w3.org/2005/Atom}summary') or entry.find('{http://www.w3.org/2005/Atom}content') or entry.find('summary') or entry.find('content')
+                        desc = summary_elem.text.strip() if summary_elem is not None else ""
+                        desc = re.sub(r'<[^>]*>', '', desc)
+                        if len(desc) > 200:
+                            desc = desc[:200] + "..."
+                            
+                        pub_elem = entry.find('{http://www.w3.org/2005/Atom}published') or entry.find('{http://www.w3.org/2005/Atom}updated') or entry.find('published') or entry.find('updated')
+                        pub_date = pub_elem.text.strip() if pub_elem is not None else ""
+                        
+                        articles.append({
+                            'title': title,
+                            'link': link,
+                            'description': desc,
+                            'pubDate': pub_date
+                        })
+            except Exception as ex:
+                print(f"[{category_name}] RSS取得・パースエラー ({url}): {ex}")
+                
+        if not articles:
+            return "直近で取得可能なRSS記事はありませんでした。"
+            
+        rss_text = ""
+        for idx, art in enumerate(articles[:10]):  # 最大10件
+            rss_text += f"[{idx+1}] タイトル: {art['title']}\n"
+            rss_text += f"    ソースURL: {art['link']}\n"
+            rss_text += f"    公開日時: {art['pubDate']}\n"
+            rss_text += f"    要約: {art['description']}\n\n"
+            
+        return rss_text
+    except Exception as e:
+        print(f"[{category_name}] fetch_rss_feeds_by_category で想定外のエラー: {e}")
+        return "直近で取得可能なRSS記事はありませんでした。"
+
+
 def clean_emoji_and_symbols(text):
     """テキストから絵文字および装飾絵文字記号を完全に排除する"""
     emoji_pattern = re.compile(
@@ -434,13 +544,22 @@ def main():
     print("\n--- ニュースレター作成プロセス（リサーチ ➔ 執筆 のバトンリレー）を開始します ---")
     for name, instruction in reporter_instructions.items():
         print(f"\n[{name} 分野] リサーチエージェントがファクト調査中...")
+        
+        # RSSフィードから事実データを取得
+        rss_data = fetch_rss_feeds_by_category(name, drive)
+        
         research_prompt = (
             f"本日の日付は {today_str} です。\n"
             f"【最優先リサーチ対象キーワード】:\n{watchlist_content}\n"
-            f"担当分野: {name}\n"
-            "あなたの役割定義に従い、この分野および最優先キーワードに関する直近24時間の重要ニュースや事実データを、"
-            "Google Searchを用いて徹底的に調査し、客観的な事実と情報ソースURL（Sources）のみを詳細にまとめた『リサーチレポート』を作成してください。"
-            "推測やハルシネーション（事実の捏造）は一切含めないでください。"
+            f"担当分野: {name}\n\n"
+            f"【RSSフィードから収集された確実な事実ソース】:\n{rss_data}\n\n"
+            "あなたの役割定義に従い、この分野および最優先キーワードに関する最新重要ニュースや事実データを調査し、"
+            "客観的な事実と情報ソースURL（Sources）および記事タイトルのみを詳細にまとめた『リサーチレポート』を作成してください。\n"
+            "【優先リサーチ指示】:\n"
+            "1. 上記の『RSSフィードから収集された確実な事実ソース』の中に該当分野に関連するニュースがある場合は、その情報を最優先してレポートを作成してください。\n"
+            "2. レポート内の各事実に対し、必ずRSSフィードから提供されたソースURL（元のリンク）および記事のタイトルを明記してください。\n"
+            "3. Google Searchは、RSSフィードに関連ニュースが不足している場合の補助調査（またはRSSソースの裏付け・詳細化）として使用してください。\n"
+            "4. 推測やハルシネーション（事実の捏造）は一切含めないでください。\n"
             "【重要規約】: レポート内において、絵文字やシンボルマーク（✅や🚀など）は一切使用しないでください。"
         )
         
@@ -467,8 +586,12 @@ def main():
             f"【最優先リサーチ対象キーワード】:\n{watchlist_content}\n\n"
             f"【リサーチ部門からの確定事実レポート】:\n{research_report}\n\n"
             "上記の確定事実レポートおよび最優先キーワードに基づき、あなたの役割定義に従って、"
-            "詳細に記事を執筆してください。各トピックには個別に 'Tandy's Insight' を記述してください。"
-            "必ずレポートに記載されている事実に基づき、ハルシネーション（事実の捏造）を決して行わないでください。"
+            "詳細に記事を執筆してください。\n"
+            "【最重要指示（情報量の増強）】:\n"
+            "1. 1つのトピック（見出し）あたりの情報量を大幅に増やし、背景、詳細な事実、将来的な影響、およびリサーチレポートで明記されたソースURL（Sources）と記事タイトルを、読者が納得できるよう詳しく長文で記述してください。\n"
+            "2. 単なる要約で終わらせず、非常に読み応えのある知的なオピニオン記事として深く論述してください。\n"
+            "3. 各トピックには、個別に 'Tandy's Insight' を記述してください。インサイトの構成やトーンは従来通り（1〜2行のビジネス影響分析）で問題ありません。\n"
+            "4. 必ずリサーチレポートに記載されている事実に基づき、ハルシネーション（事実の捏造）を決して行わないでください。\n"
             "【重要規約】: 本文および見出しにおいて、絵文字やシンボルマーク（✅や🚀など）は一切使用しないでください。"
             "また、毎朝読むCEOが今日一日前向きで知的なエネルギーに満ちあふれるよう、"
             "客観的かつ建設的で、自己肯定感の高まる高尚な文体で論述してください。"

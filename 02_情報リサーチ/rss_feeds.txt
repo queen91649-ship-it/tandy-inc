@@ -1,0 +1,15 @@
+# Tandy.inc RSS Feeds List
+# 分野名=RSS_URL の形式で記述してください（行頭に # をつけるとコメントアウト）。
+# 各分野名: japan, global, ai, infra, spurs, premier, europe, serendipity
+
+japan=https://news.yahoo.co.jp/rss/topics/top-picks.xml
+japan=https://www.nhk.or.jp/rss/news/cat0.xml
+global=https://www.reutersagency.com/feed/
+global=https://news.yahoo.co.jp/rss/topics/world.xml
+ai=https://techcrunch.com/feed/
+ai=https://wired.jp/feed/rss/
+infra=https://www.submarinenetworks.com/news?format=feed&type=rss
+spurs=https://www.skysports.com/football/teams/tottenham-hotspur/rss
+premier=https://www.skysports.com/premier-league/rss
+europe=https://www.skysports.com/football/rss
+serendipity=https://www.nasa.gov/feed/
