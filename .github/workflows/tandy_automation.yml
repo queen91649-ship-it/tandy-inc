@@ -1,9 +1,9 @@
 name: Tandy.inc Daily Newsletter Automation
 
 on:
-  schedule:
-    # 毎日日本時間 AM 6:00 (UTC PM 21:00) に自動起動
-    - cron: '0 21 * * *'
+  # schedule:
+  #   # 毎日日本時間 AM 6:00 (UTC PM 21:00) に自動起動
+  #   - cron: '0 21 * * *'
   workflow_dispatch:
     # GitHub上の管理画面から手動でポチッとデバッグ起動できるようにする設定
     inputs:

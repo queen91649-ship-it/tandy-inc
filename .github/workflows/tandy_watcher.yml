@@ -1,11 +1,11 @@
 name: Tandy.inc Inbox Watcher Automation
 
 on:
-  schedule:
-    # 毎日日本時間 AM 9:00 (UTC AM 0:00)
-    - cron: '0 0 * * *'
-    # 毎日日本時間 PM 17:00 (UTC AM 8:00)
-    - cron: '0 8 * * *'
+  # schedule:
+  #   # 毎日日本時間 AM 9:00 (UTC AM 0:00)
+  #   - cron: '0 0 * * *'
+  #   # 毎日日本時間 PM 17:00 (UTC AM 8:00)
+  #   - cron: '0 8 * * *'
   workflow_dispatch:
     # GitHubのWebUIから手動実行できるようにする設定
     inputs:

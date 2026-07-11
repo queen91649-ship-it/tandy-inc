@@ -1,15 +1,15 @@
 name: Tandy.inc AI Proposal Automation
 
 on:
-  schedule:
-    # 毎週月曜日日本時間 AM 9:00 (UTC AM 0:00)
-    # 5フィールド: 分 時 日 月 曜日 (1 = 月曜日)
-    - cron: '0 0 * * 1'
+  # schedule:
+  #   # 毎週月曜日日本時間 AM 9:00 (UTC AM 0:00)
+  #   # 5フィールド: 分 時 日 月 曜日 (1 = 月曜日)
+  #   - cron: '0 0 * * 1'
   workflow_dispatch:
     # GitHubのWebUIから手動実行できるようにする設定
     inputs:
       reason:
-        description: '手動起動の理由'
+        description: '手動起動 of 理由'
         required: false
         default: '手動テスト起動'
 
