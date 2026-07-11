@@ -676,17 +676,25 @@ async def main():
     auditor_prompt = (
         "あなたはTandy.incの法務監査・コンプライアンス監査役です。\n"
         f"本日の正確な日付は {today_str}（2026年）です。この日付を絶対的な基準として、以下の朝刊（初稿）の内容に、事実誤認や不確かな情報（ハルシネーション）がないか、"
-        "また過去のニュースの混入がないかを、あなたの監査基準に従って厳格にチェックし、必要であれば修正した最終稿を出力してください。\n"
+        "また過去のニュースの混入がないかを、あなたの監査基準に従って厳格にチェックしてください。\n"
         "【重要】: 記載された最新ニュースや新技術について、自身の過去の知識だけに頼らず、必ずgoogle_searchツールを積極的に用いてWeb検索を行い、裏付けのある正しい事実であるか二重検証を行ってください。ソースが実在するものは誤ってハルシネーションと判定しないでください。\n"
         f"また、以下のURL検証ログを監査し、リンク切れなどの警告があれば、必要に応じて修正または注記を追加してください。\n"
         f"【URL検証ログ】:\n{link_report}\n\n"
         f"【朝刊初稿】:\n{draft}\n\n"
-        "最後に、朝刊ドラフトの末尾にあなたの監査レポートをドッキングした最終版を出力してください。\n"
-        "【重要規約】: 本文および見出し、監査レポートを含め、絵文字やシンボルマークは一切使用しないでください。"
+        "監査を行い、あなたの【監査レポート】（監査結果サマリー、ファクトチェック二重検証ログ、生存リンクチェック結果、最終判定）のみを出力してください。元の朝刊原稿を含める必要はありません。\n"
+        "【重要規約】: 監査レポート内を含め、絵文字やシンボルマークは一切使用しないでください。"
     )
-    final = await run_agent(auditor_instruction, auditor_prompt, enable_search=True)
-    final = clean_emoji_and_symbols(final)
+    audit_report = await run_agent(auditor_instruction, auditor_prompt, enable_search=True)
+    audit_report = clean_emoji_and_symbols(audit_report)
     print("Compliance監査完了。")
+
+    # 朝刊原稿と監査レポートを安全にドッキング
+    final_output = (
+        f"{draft}\n\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"## 法務・信頼性監査レポート\n\n"
+        f"{audit_report}"
+    )
 
     # Googleドライブへ自動アーカイブ ＆ 上書き美装納品
     print("\n--- Googleドライブへ朝刊をアーカイブ ＆ 納品中 ---")
@@ -696,7 +704,7 @@ async def main():
     except Exception:
         pass
 
-    file_id = drive.archive_and_update_newsletter(newsletters_folder_id, final)
+    file_id = drive.archive_and_update_newsletter(newsletters_folder_id, final_output)
     print(f"\n朝刊の納品完了！")
     print(f"本日付: {today_str}")
 
